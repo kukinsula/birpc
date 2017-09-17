@@ -1,0 +1,20 @@
+{
+  "name": "birpc",
+  "version": "1.0.0",
+  "description": "Bidirectional RPC Server",
+  "main": "app.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "tsc && node src/app.js",
+    "pretest": "tsc test/*.ts --module commonjs --target es6",
+    "test": "./node_modules/.bin/mocha test/*.js",
+    "clean": "rm -fr src/*.js test/*.js doc/",
+    "stat": "wc -l src/*.ts"
+  },
+  "author": "Texier-Atger Lucas",
+  "license": "ISC",
+  "devDependencies": {
+    "@types/node": "^8.0.28"
+  },
+  "dependencies": {}
+}
