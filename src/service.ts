@@ -1,6 +1,7 @@
+import { Client } from './client';
 import { ServiceError } from './error';
 
-export type Service = (args: any[]) => Promise<any>
+export type Service = (client: Client, args: any) => Promise<any>
 
 export class ServiceSet {
   private services: { [name: string]: Service };
@@ -11,14 +12,14 @@ export class ServiceSet {
     this.services[name] = service;
   }
 
-  public Exec(name: string, args: any[]): Promise<any> {
+  public Exec(name: string, client: Client, args: any): Promise<any> {
     return new Promise<any>((resolve, reject) => {
       let service = this.services[name];
 
       if (service == undefined)
         return reject(ServiceError(`Service '${name}' does not exist`));
 
-      service.call(args)
+      service.call(service, client, args)
         .then((res: any) => { resolve(res); })
         .catch((err: any) => { reject(ServiceError(`${err}`)); });
     });

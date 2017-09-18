@@ -1,5 +1,5 @@
 export interface Request {
-  id: number;
+  id?: number;
   method: string;
   params: any;
 }
@@ -14,37 +14,60 @@ export interface Response {
   };
 }
 
+export class Message {
+  public req: Request;
+  public resp: Response;
+
+  constructor(req?: Request, resp?: Response) {
+    if (req != undefined) this.req = req;
+    if (resp != undefined) this.resp = resp;
+  }
+
+  public IsRequest(): boolean {
+    return this.req != undefined && this.req.method != '';
+  }
+
+  public IsResponse(): boolean {
+    return this.resp != undefined && !this.IsRequest();
+  }
+
+  public toString(): string {
+    if (this.IsRequest()) return JSON.stringify(this.req);
+    else return JSON.stringify(this.resp);
+  }
+}
+
 export interface Codec {
-  Encode(v: Request | Response): string
-  Decode(v: string): Request | Response
+  Encode(msg: Message): string
+  Decode(str: string): Message
 }
 
 export class JsonRpcCodec implements Codec {
-  public Encode(v: Request | Response): string {
-    return JSON.stringify(v);
+  public Encode(msg: Message): string {
+    if (msg.IsRequest()) return JSON.stringify(msg.req);
+    else return JSON.stringify(msg.resp);
   }
 
-  public Decode(v: string): Request | Response {
-    let message: any = {};
+  public Decode(str: string): Message {
+    let msg: Message = new Message();
+    let raw: any = {};
 
-    try { message = JSON.parse(v); } catch (err) { throw `${err}`; }
+    try { raw = JSON.parse(str); } catch (err) { throw `${err}`; }
 
-    if (message.id % 2 == 0) {
-      let req: Request = {
-        id: message.id,
-        method: message.method,
-        params: message.params
+    if (raw.method != '') {
+      msg.req = {
+        id: raw.id,
+        method: raw.method,
+        params: raw.params
       };
-
-      return req;
+    } else {
+      msg.resp = {
+        id: raw.id,
+        result: raw.result,
+        error: raw.error,
+      };
     }
 
-    let resp: Response = {
-      id: message.id,
-      result: message.result == undefined ? undefined : message.result,
-      error: message.error == undefined ? undefined : message.error,
-    };
-
-    return resp;
+    return msg;
   }
 }
