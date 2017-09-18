@@ -53,18 +53,29 @@ export class Server {
     return new Promise<void>((resolve, reject) => {
       console.log(`Server ${this.Address()} closing...`);
 
-      Object.keys(this.clients).forEach((address: string) => {
-        this.clients[address].Close();
-        this.unregister(this.clients[address]);
-      });
-
       this.server.close((err: any) => {
         if (err != undefined) reject(ServerError(`${err}`));
 
-        console.log(`Server ${this.Address()} closed`);
+        console.log(`Server ${this.Address()} closed!`);
+
+        this.closeAllClients();
+
         resolve();
       });
     });
+  }
+
+  private closeAllClients(): void {
+    console.log(`Closing all clients...`);
+
+    let addresses = Object.keys(this.clients);
+
+    addresses.forEach((address: string) => {
+      this.clients[address].Close();
+      this.unregister(this.clients[address]);
+    });
+
+    console.log(`Closed ${addresses.length} clients!`);
   }
 
   private register(client: Client): void {

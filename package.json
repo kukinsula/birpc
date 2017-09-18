@@ -14,7 +14,8 @@
   "author": "Texier-Atger Lucas",
   "license": "ISC",
   "devDependencies": {
-    "@types/node": "^8.0.28"
+    "@types/node": "^8.0.28",
+    "mocha": "^3.5.3"
   },
   "dependencies": {}
 }

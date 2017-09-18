@@ -48,7 +48,9 @@ export class Client {
             this.sendResponse({ id: req.id, result: res });
         })
         .catch((err: Error) => {
-          console.log(`Service '${req.method}' Exec failed: ${err.stack}`);
+          console.log(
+            `Service '${req.method}' Exec failed: ${err.name}: ${err.message}
+${err.stack}`);
 
           if (req.id != undefined)
             this.sendResponse({
