@@ -1,5 +1,7 @@
 function error(name: string): (message: string) => Error {
   return (message: string) => {
+    if (typeof message != 'string') message = `${message}`;
+
     let err = new Error(message);
 
     err.name = name;

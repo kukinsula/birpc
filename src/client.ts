@@ -11,6 +11,8 @@ export class Client {
   private services: ServiceSet;
   private id: number;
   private calls: { [id: number]: Call };
+  private resolve: any;
+  private reject: any;
 
   constructor(socket: net.Socket, codec: Codec, services?: ServiceSet) {
     this.socket = socket;
@@ -22,19 +24,29 @@ export class Client {
 
   public Start(): Promise<void> {
     return new Promise<void>((resolve, reject) => {
+      this.resolve = resolve;
+      this.reject = reject;
+
       console.log(`Incoming connection from ${this.Address()}`);
 
-      this.socket.on('data', (buf: Buffer) => { this.handleData(buf, reject); });
+      this.socket.on('data', (buf: Buffer) => { this.handleData(buf); });
       this.socket.on('error', (err: any) => { reject(ClientError(err)); });
       this.socket.on('end', () => { resolve(); });
     });
   }
 
-  private handleData(buf: Buffer, reject: any): void {
+  public Close(): void { this.socket.end(); }
+
+  public Stop(): void {
+    this.Close();
+    this.resolve();
+  }
+
+  private handleData(buf: Buffer): void {
     let message: Message;
 
     try { message = this.codec.Decode(buf.toString()); } catch (err) {
-      return reject(CodecError(err));
+      return this.reject(CodecError(err));
     }
 
     console.log(`${this.Address()} -> ${message.toString()}`);
@@ -67,7 +79,7 @@ ${err.stack}`);
       let call = this.calls[resp.id];
 
       if (call == undefined)
-        return reject(ClientError(`Call not found`));
+        return this.reject(ClientError(`Call not found`));
 
       if (resp.error == undefined)
         call.Resolve(resp.result);
@@ -77,12 +89,10 @@ ${err.stack}`);
           message: resp.error.message
         });
     } else {
-      reject(ClientError(
+      this.reject(ClientError(
         'Received message is neither a Request nor a Response'));
     }
   }
-
-  public Close(): void { this.socket.end(); }
 
   private sendRequest(req: Request): void {
     this.send(new Message(req));
