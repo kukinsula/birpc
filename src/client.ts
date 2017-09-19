@@ -12,16 +12,23 @@ export class Client {
   private calls: { [id: number]: Call };
   private resolve: any;
   private reject: any;
+  private server: boolean;
+  private prefix: string;
   public Address: string;
 
-  constructor(codec: Codec, services?: ServiceSet) {
+  constructor(codec: Codec, services?: ServiceSet, server: boolean = false) {
     this.codec = codec;
     this.services = services || new ServiceSet();
     this.id = 0;
     this.calls = {};
+    this.server = server;
 
     let socket = codec.GetSocket();
-    this.Address = `${socket.remoteAddress}:${socket.remotePort}`;
+    this.Address = server ?
+      `${socket.remoteAddress}:${socket.remotePort}` :
+      `${socket.localAddress}:${socket.localPort}`;
+
+    this.prefix = (server ? `Client* ` : `Client `) + this.Address;
   }
 
   public Start(): Promise<void> {
@@ -29,7 +36,7 @@ export class Client {
       this.resolve = resolve;
       this.reject = reject;
 
-      console.log(`Incoming connection from ${this.Address}`);
+      console.log(`${this.prefix} started bi RPC!`);
 
       this.codec.on('data', this.handleMessage.bind(this));
       this.codec.on('error', (err: Error) => { reject(err); });
@@ -45,7 +52,7 @@ export class Client {
   }
 
   private handleMessage(msg: Message): void {
-    console.log(`${this.Address} -> ${msg.toString()}`);
+    console.log(`${this.prefix} -> ${msg.toString()}`);
 
     if (msg.IsRequest()) this.handleRequest(msg.req);
     else if (msg.IsResponse()) this.handleResponse(msg.resp);
@@ -63,7 +70,7 @@ export class Client {
           });
       })
       .catch((err: Error) => {
-        console.log(`Service '${req.method}' Exec failed: ` +
+        console.log(`${this.prefix} Service '${req.method}' Exec failed: ` +
           `${err.name}: ${err.message}\n${err.stack}`);
 
         if (req.id != undefined)
@@ -100,7 +107,7 @@ export class Client {
 
     let msg = new Message(req);
 
-    console.log(`${this.Address} -> ${msg.toString()}`);
+    console.log(`${this.prefix} -> ${msg.toString()}`);
 
     this.codec.Encode(msg);
   }
@@ -108,7 +115,7 @@ export class Client {
   private sendResponse(resp: Response): void {
     let msg = new Message(undefined, resp);
 
-    console.log(`${this.Address} <- ${msg.toString()}`);
+    console.log(`${this.prefix} <- ${msg.toString()}`);
 
     this.codec.Encode(msg);
   }
@@ -134,6 +141,8 @@ export class Client {
       params: params
     });
   }
+
+  public GetPrefix(): string { return this.prefix; }
 }
 
 export class Call {

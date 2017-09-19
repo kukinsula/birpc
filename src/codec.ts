@@ -58,7 +58,8 @@ export abstract class Codec extends EventEmitter {
       let message: Message;
 
       try { message = this.Decode(buf.toString()); } catch (err) {
-        return this.emit(err);
+        this.emit('error', CodecError(`${err}`));
+        return;
       }
 
       this.emit('data', message);

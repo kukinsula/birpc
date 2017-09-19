@@ -26,16 +26,16 @@ export class Server {
     });
 
     this.server.on('connection', (socket: net.Socket) => {
-      let client = new Client(new JsonRpcCodec(socket), this.services);
+      let client = new Client(new JsonRpcCodec(socket), this.services, true);
 
       this.register(client);
 
       client.Start()
         .catch((err: Error) => {
-          console.log(`Client ${client.Address} ${err}`);
+          console.log(`Client ${client.GetPrefix()} ${err}`);
         })
         .then(() => {
-          console.log(`Client ${client.Address} connection ended`);
+          console.log(`Client ${client.GetPrefix()} connection ended`);
 
           client.Close();
           this.unregister(client);
@@ -58,28 +58,43 @@ export class Server {
       console.log(`Server ${this.Address()} closing listener...`);
 
       this.server.close((err: any) => {
-        if (err != undefined) reject(ServerError(`${err}`));
+        console.log('XXXXXXXXXX');
+
+        if (err != undefined) {
+          console.log('YYYYYYYYYYYY', err);
+          return reject(ServerError(`${err}`));
+        }
 
         console.log(`Server ${this.Address()} listener closed!`);
-
-        this.closeAllClients();
 
         resolve();
       });
     });
   }
 
-  private closeAllClients(): void {
-    console.log(`Closing all clients...`);
+  public Shutdown(): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+      let err: Error;
 
-    let addresses = Object.keys(this.clients);
+      return this.Close()
+        .catch((error: Error) => { err = error; })
+        .then(() => {
+          if (err != undefined) return reject(err);
 
-    addresses.forEach((address: string) => {
-      this.clients[address].Close();
-      this.unregister(this.clients[address]);
+          console.log(`Closing all clients...`);
+
+          let addresses = Object.keys(this.clients);
+
+          addresses.forEach((address: string) => {
+            this.clients[address].Stop();
+            this.unregister(this.clients[address]);
+          });
+
+          console.log(`Closed ${addresses.length} clients!`);
+
+          resolve();
+        });
     });
-
-    console.log(`Closed ${addresses.length} clients!`);
   }
 
   private register(client: Client): void {

@@ -26,20 +26,22 @@ export class JsonRpcCodec extends Codec {
     let msg: Message = new Message();
     let raw: any = {};
 
-    try { raw = JSON.parse(str); } catch (err) { throw `${err} `; }
+    try { raw = JSON.parse(str); } catch (err) { throw `${err}`; }
 
-    if (raw.method != '') {
+    if (raw.method != undefined && raw.method != '') {
       msg.req = {
         id: raw.id,
         method: raw.method,
         params: raw.params
       };
-    } else {
+    } else if (raw.result != undefined || raw.error != undefined) {
       msg.resp = {
         id: raw.id,
         result: raw.result,
         error: raw.error,
       };
+    } else {
+      throw `Message is neither a Request nor a Response`;
     }
 
     return msg;

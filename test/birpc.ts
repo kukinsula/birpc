@@ -60,6 +60,6 @@ describe('Server', () => {
               .catch((err: Error) => { done(err); });
           });
       });
-    }, 200);
+    }, 10);
   });
 });
