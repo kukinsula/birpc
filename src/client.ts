@@ -47,6 +47,7 @@ export class Client {
   public Close(): void { this.codec.Close(); }
 
   public Stop(): void {
+    // TODO: remove Client from Server's list
     this.Close();
     this.resolve();
   }
@@ -57,7 +58,7 @@ export class Client {
     if (msg.IsRequest()) this.handleRequest(msg.req);
     else if (msg.IsResponse()) this.handleResponse(msg.resp);
     else this.reject(ClientError(
-      'Received message is neither a Request nor a Response'));
+      'Invalid Message: it is neither a Request nor a Response'));
   }
 
   private handleRequest(req: Request): void {
@@ -104,10 +105,9 @@ export class Client {
 
   private sendRequest(req: Request): void {
     if (req.params != undefined) {
-      switch (req.params.length) {
-        case 0: req.params = undefined; break;
-        case 1: req.params = req.params[0]; break;
-      }
+      let len = req.params.length;
+      if (len == 0) req.params = undefined;
+      else if (len == 1) req.params = req.params[0];
     }
 
     this.send(new Message(req));

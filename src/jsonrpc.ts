@@ -41,7 +41,7 @@ export class JsonRpcCodec extends Codec {
         error: raw.error,
       };
     } else {
-      throw `Message is neither a Request nor a Response`;
+      throw `Invalid Message`;
     }
 
     return msg;

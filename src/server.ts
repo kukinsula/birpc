@@ -58,12 +58,7 @@ export class Server {
       console.log(`Closing Server listening at ${this.Address()}...`);
 
       this.server.close((err: any) => {
-        console.log('XXXXXXXXXX');
-
-        if (err != undefined) {
-          console.log('YYYYYYYYYYYY', err);
-          return reject(ServerError(`${err}`));
-        }
+        if (err != undefined) return reject(ServerError(`${err}`));
 
         console.log(`Server listening at ${this.Address()} closed!`);
 
