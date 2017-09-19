@@ -3,7 +3,7 @@ import * as net from 'net';
 import { Client } from './client';
 import { ServiceSet, Service } from './service';
 import { ServerError } from './error';
-import { JsonRpcCodec } from './codec';
+import { JsonRpcCodec } from './jsonrpc';
 
 export class Server {
   private host: string;
@@ -15,27 +15,27 @@ export class Server {
   constructor(host: string, port: number) {
     this.host = host;
     this.port = port;
-
     this.server = new net.Server();
-
-    this.clients = {};
     this.services = new ServiceSet();
+    this.clients = {};
+  }
 
+  public Start(): void {
     this.server.on('listening', () => {
-      console.log(`Server listening at ${this.host}:${this.port}`);
+      console.log(`Server listening at ${this.host}:${this.port}!`);
     });
 
     this.server.on('connection', (socket: net.Socket) => {
-      let client = new Client(socket, new JsonRpcCodec(), this.services);
+      let client = new Client(new JsonRpcCodec(socket), this.services);
 
       this.register(client);
 
       client.Start()
         .catch((err: Error) => {
-          console.log(`Client ${client.Address()} ${err}`);
+          console.log(`Client ${client.Address} ${err}`);
         })
         .then(() => {
-          console.log(`Client ${this.Address()} connection ended`);
+          console.log(`Client ${client.Address} connection ended`);
 
           client.Close();
           this.unregister(client);
@@ -45,18 +45,22 @@ export class Server {
     this.server.on('error', (err: any) => {
       console.log(`Server encountured  an error: ${err}`);
     });
-  }
 
-  public Start(): void { this.server.listen(this.port, this.host); }
+    this.server.on('close', (err: any) => {
+      console.log(`Server closed!`);
+    });
+
+    this.server.listen(this.port, this.host);
+  }
 
   public Close(): Promise<void> {
     return new Promise<void>((resolve, reject) => {
-      console.log(`Server ${this.Address()} closing...`);
+      console.log(`Server ${this.Address()} closing listener...`);
 
       this.server.close((err: any) => {
         if (err != undefined) reject(ServerError(`${err}`));
 
-        console.log(`Server ${this.Address()} closed!`);
+        console.log(`Server ${this.Address()} listener closed!`);
 
         this.closeAllClients();
 
@@ -79,11 +83,11 @@ export class Server {
   }
 
   private register(client: Client): void {
-    this.clients[client.Address()] = client;
+    this.clients[client.Address] = client;
   }
 
   private unregister(client: Client): void {
-    delete this.clients[client.Address()];
+    delete this.clients[client.Address];
   }
 
   public Add(name: string, service: Service): void {

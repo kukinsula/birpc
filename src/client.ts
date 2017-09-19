@@ -6,20 +6,22 @@ import { ServiceSet } from './service';
 import { ClientError, CodecError } from './error';
 
 export class Client {
-  private socket: net.Socket;
   private codec: Codec;
   private services: ServiceSet;
   private id: number;
   private calls: { [id: number]: Call };
   private resolve: any;
   private reject: any;
+  public Address: string;
 
-  constructor(socket: net.Socket, codec: Codec, services?: ServiceSet) {
-    this.socket = socket;
+  constructor(codec: Codec, services?: ServiceSet) {
     this.codec = codec;
     this.services = services || new ServiceSet();
     this.id = 0;
     this.calls = {};
+
+    let socket = codec.GetSocket();
+    this.Address = `${socket.remoteAddress}:${socket.remotePort}`;
   }
 
   public Start(): Promise<void> {
@@ -27,85 +29,88 @@ export class Client {
       this.resolve = resolve;
       this.reject = reject;
 
-      console.log(`Incoming connection from ${this.Address()}`);
+      console.log(`Incoming connection from ${this.Address}`);
 
-      this.socket.on('data', (buf: Buffer) => { this.handleData(buf); });
-      this.socket.on('error', (err: any) => { reject(ClientError(err)); });
-      this.socket.on('end', () => { resolve(); });
+      this.codec.on('data', this.handleMessage.bind(this));
+      this.codec.on('error', (err: Error) => { reject(err); });
+      this.codec.on('end', () => { resolve(); });
     });
   }
 
-  public Close(): void { this.socket.end(); }
+  public Close(): void { this.codec.Close(); }
 
   public Stop(): void {
     this.Close();
     this.resolve();
   }
 
-  private handleData(buf: Buffer): void {
-    let message: Message;
+  private handleMessage(msg: Message): void {
+    console.log(`${this.Address} -> ${msg.toString()}`);
 
-    try { message = this.codec.Decode(buf.toString()); } catch (err) {
-      return this.reject(CodecError(err));
-    }
+    if (msg.IsRequest()) this.handleRequest(msg.req);
+    else if (msg.IsResponse()) this.handleResponse(msg.resp);
+    else this.reject(ClientError(
+      'Received message is neither a Request nor a Response'));
+  }
 
-    console.log(`${this.Address()} -> ${message.toString()}`);
+  private handleRequest(req: Request): void {
+    this.services.Exec(req.method, this, req.params)
+      .then((res: any) => {
+        if (req.id != undefined)
+          this.sendResponse({
+            id: req.id,
+            result: res
+          });
+      })
+      .catch((err: Error) => {
+        console.log(`Service '${req.method}' Exec failed: ` +
+          `${err.name}: ${err.message}\n${err.stack}`);
 
-    if (message.IsRequest()) {
-      let req = message.req;
+        if (req.id != undefined)
+          this.sendResponse({
+            id: req.id,
+            error: {
+              code: 500,
+              message: 'Server internal error',
+              data: req
+            }
+          });
+      });
+  }
 
-      this.services.Exec(req.method, this, req.params)
-        .then((res: any) => {
-          if (req.id != undefined)
-            this.sendResponse({ id: req.id, result: res });
-        })
-        .catch((err: Error) => {
-          console.log(
-            `Service '${req.method}' Exec failed: ${err.name}: ${err.message}
-${err.stack}`);
+  private handleResponse(resp: Response): void {
+    let call = this.calls[resp.id];
 
-          if (req.id != undefined)
-            this.sendResponse({
-              id: req.id,
-              error: {
-                code: 500,
-                message: 'Server internal error',
-                data: req.params
-              }
-            });
-        });
-    } else if (message.IsResponse()) {
-      let resp = message.resp;
-      let call = this.calls[resp.id];
+    if (call == undefined)
+      return this.reject(ClientError(`Call not found`));
 
-      if (call == undefined)
-        return this.reject(ClientError(`Call not found`));
+    delete this.calls[resp.id];
 
-      if (resp.error == undefined)
-        call.Resolve(resp.result);
-      else
-        call.Reject({
-          name: 'ClientResponse',
-          message: resp.error.message
-        });
-    } else {
-      this.reject(ClientError(
-        'Received message is neither a Request nor a Response'));
-    }
+    if (resp.error == undefined)
+      call.Resolve(resp.result);
+    else
+      call.Reject({
+        name: 'ClientResponse',
+        message: resp.error.message
+      });
   }
 
   private sendRequest(req: Request): void {
-    this.send(new Message(req));
+    req.params = req.params.length == 1 ? req.params[0] : req.params;
+
+    let msg = new Message(req);
+
+    console.log(`${this.Address} -> ${msg.toString()}`);
+
+    this.codec.Encode(msg);
   }
 
   private sendResponse(resp: Response): void {
-    this.send(new Message(undefined, resp));
-  }
+    let msg = new Message(undefined, resp);
 
-  private send(msg: Message): void {
-    console.log(`${this.Address()} <- ${msg.toString()}`);
+    console.log(`${this.Address} <- ${msg.toString()}`);
 
-    this.socket.write(this.codec.Encode(msg), 'UTF8');
+    this.codec.Encode(msg);
   }
 
   public Call(name: string, ...params: any[]): Promise<any> {
@@ -128,10 +133,6 @@ ${err.stack}`);
       method: name,
       params: params
     });
-  }
-
-  public Address(): string {
-    return `${this.socket.remoteAddress}:${this.socket.remotePort}`;
   }
 }
 

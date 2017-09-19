@@ -4,7 +4,7 @@ import { describe, it, before, after } from 'mocha';
 
 import { Server } from '../src/server';
 import { Client } from '../src/client';
-import { JsonRpcCodec } from '../src/codec';
+import { JsonRpcCodec } from '../src/jsonrpc';
 
 const assert = require('assert');
 
@@ -38,7 +38,7 @@ describe('Server', () => {
       let socket = net.createConnection({ host: host, port: port }, () => {
         console.log('Connected!');
 
-        let client = new Client(socket, new JsonRpcCodec());
+        let client = new Client(new JsonRpcCodec(socket));
 
         client.Start()
           .then(() => { })

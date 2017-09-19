@@ -1,3 +1,8 @@
+import { EventEmitter } from 'events';
+import * as net from 'net';
+
+import { CodecError } from './error';
+
 export interface Request {
   id?: number;
   method: string;
@@ -33,41 +38,46 @@ export class Message {
 
   public toString(): string {
     if (this.IsRequest()) return JSON.stringify(this.req);
-    else return JSON.stringify(this.resp);
+    else if (this.IsResponse()) return JSON.stringify(this.resp);
+    else return 'Message is neither a Request nor a Response';
   }
 }
 
-export interface Codec {
-  Encode(msg: Message): string
-  Decode(str: string): Message
-}
+export abstract class Codec extends EventEmitter {
+  private socket: net.Socket;
 
-export class JsonRpcCodec implements Codec {
-  public Encode(msg: Message): string {
-    if (msg.IsRequest()) return JSON.stringify(msg.req);
-    else return JSON.stringify(msg.resp);
+  abstract Encode(msg: Message): void
+  abstract Decode(str: string): Message
+
+  constructor(socket: net.Socket) {
+    super();
+
+    this.socket = socket;
+
+    this.socket.on('data', (buf: Buffer) => {
+      let message: Message;
+
+      try { message = this.Decode(buf.toString()); } catch (err) {
+        return this.emit(err);
+      }
+
+      this.emit('data', message);
+    });
+
+    this.socket.on('error', (err: any) => {
+      this.emit('error', CodecError(`${err}`));
+    });
+
+    this.socket.on('end', () => {
+      this.emit('end');
+    });
   }
 
-  public Decode(str: string): Message {
-    let msg: Message = new Message();
-    let raw: any = {};
-
-    try { raw = JSON.parse(str); } catch (err) { throw `${err}`; }
-
-    if (raw.method != '') {
-      msg.req = {
-        id: raw.id,
-        method: raw.method,
-        params: raw.params
-      };
-    } else {
-      msg.resp = {
-        id: raw.id,
-        result: raw.result,
-        error: raw.error,
-      };
-    }
-
-    return msg;
+  protected Write(str: string): void {
+    this.socket.write(str, 'UTF8');
   }
+
+  public Close(): void { this.socket.end(); }
+
+  public GetSocket(): net.Socket { return this.socket; }
 }
