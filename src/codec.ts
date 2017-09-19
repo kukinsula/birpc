@@ -6,7 +6,7 @@ import { CodecError } from './error';
 export interface Request {
   id?: number;
   method: string;
-  params: any;
+  params?: any[];
 }
 
 export interface Response {

@@ -36,7 +36,7 @@ export class Client {
       this.resolve = resolve;
       this.reject = reject;
 
-      console.log(`${this.prefix} started bi RPC!`);
+      console.log(`${this.prefix} started bidirectional RPC!`);
 
       this.codec.on('data', this.handleMessage.bind(this));
       this.codec.on('error', (err: Error) => { reject(err); });
@@ -103,7 +103,12 @@ export class Client {
   }
 
   private sendRequest(req: Request): void {
-    req.params = req.params.length == 1 ? req.params[0] : req.params;
+    if (req.params != undefined) {
+      switch (req.params.length) {
+        case 0: req.params = undefined; break;
+        case 1: req.params = req.params[0]; break;
+      }
+    }
 
     this.send(new Message(req));
   }
