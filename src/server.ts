@@ -55,7 +55,7 @@ export class Server {
 
   public Close(): Promise<void> {
     return new Promise<void>((resolve, reject) => {
-      console.log(`Server ${this.Address()} closing listener...`);
+      console.log(`Closing Server listening at ${this.Address()}...`);
 
       this.server.close((err: any) => {
         console.log('XXXXXXXXXX');
@@ -65,7 +65,7 @@ export class Server {
           return reject(ServerError(`${err}`));
         }
 
-        console.log(`Server ${this.Address()} listener closed!`);
+        console.log(`Server listening at ${this.Address()} closed!`);
 
         resolve();
       });
@@ -74,16 +74,11 @@ export class Server {
 
   public Shutdown(): Promise<void> {
     return new Promise<void>((resolve, reject) => {
-      let err: Error;
-
       return this.Close()
-        .catch((error: Error) => { err = error; })
         .then(() => {
-          if (err != undefined) return reject(err);
-
-          console.log(`Closing all clients...`);
-
           let addresses = Object.keys(this.clients);
+
+          console.log(`Stoping ${addresses.length} clients...`);
 
           addresses.forEach((address: string) => {
             this.clients[address].Stop();
@@ -93,7 +88,8 @@ export class Server {
           console.log(`Closed ${addresses.length} clients!`);
 
           resolve();
-        });
+        })
+        .catch((err: Error) => { reject(err); });
     });
   }
 

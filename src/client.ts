@@ -28,7 +28,7 @@ export class Client {
       `${socket.remoteAddress}:${socket.remotePort}` :
       `${socket.localAddress}:${socket.localPort}`;
 
-    this.prefix = (server ? `Client* ` : `Client `) + this.Address;
+    this.prefix = (server ? 'Client* ' : 'Client ') + this.Address;
   }
 
   public Start(): Promise<void> {

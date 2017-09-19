@@ -1,5 +1,5 @@
 import { EventEmitter } from 'events';
-import * as net from 'net';
+import { Socket } from 'net';
 
 import { CodecError } from './error';
 
@@ -44,12 +44,12 @@ export class Message {
 }
 
 export abstract class Codec extends EventEmitter {
-  private socket: net.Socket;
+  private socket: Socket;
 
   abstract Encode(msg: Message): void
   abstract Decode(str: string): Message
 
-  constructor(socket: net.Socket) {
+  constructor(socket: Socket) {
     super();
 
     this.socket = socket;
@@ -80,5 +80,5 @@ export abstract class Codec extends EventEmitter {
 
   public Close(): void { this.socket.end(); }
 
-  public GetSocket(): net.Socket { return this.socket; }
+  public GetSocket(): Socket { return this.socket; }
 }

@@ -19,7 +19,7 @@ function main() {
   server.Start();
 
   process.on('exit', (code: number) => {
-    server.Close()
+    server.Shutdown()
       .then(() => { })
       .catch((err: Error) => {
         console.log(`Server.Close failed: ${err}`);

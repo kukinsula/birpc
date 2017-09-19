@@ -19,7 +19,7 @@ describe('Server', () => {
     server.Start();
 
     setTimeout(() => {
-      server.Close()
+      server.Shutdown()
         .then(() => { done(); })
         .catch((err: Error) => { done(err); });
     }, 10);
@@ -44,18 +44,34 @@ describe('Server', () => {
 
         client.Call('hello')
           .then((res: any) => {
+            console.log('client.Call.then');
+
             assert(res === 'world', "Result is not 'world'");
 
-            server.Close()
-              .then(() => { done(); })
-              .catch((err: Error) => { done(err); });
+            server.Shutdown()
+              .then(() => {
+                console.log('server.Shutdown.then 111');
+                done();
+              })
+              .catch((err: Error) => {
+                console.log('server.Shutdown.catch 111');
+                done(err);
+              });
           })
           .catch((err: Error) => {
+            console.log('client.Call.catch', err);
+
             // done(err);
 
-            server.Close()
-              .then(() => { done(err); })
-              .catch((err: Error) => { done(err); });
+            server.Shutdown()
+              .then(() => {
+                console.log('server.Shutdown.then 222');
+                done(err);
+              })
+              .catch((err: Error) => {
+                console.log('server.Shutdown.catch 222');
+                done(err);
+              });
           });
       });
     }, 10);
