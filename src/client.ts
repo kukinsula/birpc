@@ -52,7 +52,7 @@ export class Client {
   }
 
   private handleMessage(msg: Message): void {
-    console.log(`${this.prefix} -> ${msg.toString()}`);
+    console.log(`${this.prefix} <- ${msg.toString()}`);
 
     if (msg.IsRequest()) this.handleRequest(msg.req);
     else if (msg.IsResponse()) this.handleResponse(msg.resp);
@@ -105,17 +105,15 @@ export class Client {
   private sendRequest(req: Request): void {
     req.params = req.params.length == 1 ? req.params[0] : req.params;
 
-    let msg = new Message(req);
-
-    console.log(`${this.prefix} -> ${msg.toString()}`);
-
-    this.codec.Encode(msg);
+    this.send(new Message(req));
   }
 
   private sendResponse(resp: Response): void {
-    let msg = new Message(undefined, resp);
+    this.send(new Message(undefined, resp));
+  }
 
-    console.log(`${this.prefix} <- ${msg.toString()}`);
+  private send(msg: Message): void {
+    console.log(`${this.prefix} -> ${msg.toString()}`);
 
     this.codec.Encode(msg);
   }

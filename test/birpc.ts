@@ -36,8 +36,6 @@ describe('Server', () => {
 
     setTimeout(() => {
       let socket = net.createConnection({ host: host, port: port }, () => {
-        console.log('Connected!');
-
         let client = new Client(new JsonRpcCodec(socket));
 
         client.Start()
