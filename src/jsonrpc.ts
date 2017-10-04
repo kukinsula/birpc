@@ -8,42 +8,45 @@ export class JsonRpcCodec extends Codec {
     super(socket);
   }
 
-  public Encode(msg: Message): void {
-    let str = '';
+  public Encode(msg: Message): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+      let str = '';
 
-    if (msg.IsRequest())
-      str = JSON.stringify(msg.req);
-    else if (msg.IsResponse())
-      str = JSON.stringify(msg.resp);
-    else
-      this.emit('error', CodecError(
-        `Message to encode is neither a Request nor a Response`));
+      if (msg.IsRequest()) str = JSON.stringify(msg.req);
+      else if (msg.IsResponse()) str = JSON.stringify(msg.resp);
+      else this.emit('error', CodecError(
+        'Message to encode is neither a Request nor a Response'));
 
-    this.Write(str);
+      return this.Write(str)
+        .then(() => { resolve(); })
+        .catch((err: Error) => { reject(err); });
+    });
   }
 
-  public Decode(str: string): Message {
-    let msg: Message = new Message();
-    let raw: any = {};
+  public Decode(buf: Buffer): Promise<Message> {
+    return new Promise<Message>((resolve, reject) => {
+      let msg: Message = new Message();
+      let raw: any = {};
 
-    try { raw = JSON.parse(str); } catch (err) { throw `${err}`; }
+      try { raw = JSON.parse(buf.toString()); } catch (err) {
+        return reject(CodecError(`${err}`));
+      }
 
-    if (raw.method != undefined && raw.method != '') {
-      msg.req = {
-        id: raw.id,
-        method: raw.method,
-        params: raw.params
-      };
-    } else if (raw.result != undefined || raw.error != undefined) {
-      msg.resp = {
-        id: raw.id,
-        result: raw.result,
-        error: raw.error,
-      };
-    } else {
-      throw `Invalid Message`;
-    }
+      if (raw.method != undefined && raw.method != '') {
+        msg.req = {
+          id: raw.id,
+          method: raw.method,
+          params: raw.params
+        };
+      } else if (raw.result != undefined || raw.error != undefined) {
+        msg.resp = {
+          id: raw.id,
+          result: raw.result,
+          error: raw.error
+        };
+      } else return reject(CodecError('invalid Message'));
 
-    return msg;
+      resolve(msg);
+    });
   }
 }

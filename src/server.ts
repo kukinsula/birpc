@@ -5,12 +5,17 @@ import { ServiceSet, Service } from './service';
 import { ServerError } from './error';
 import { JsonRpcCodec } from './jsonrpc';
 
+export type ConnHandler = (socket: net.Socket) => Promise<void>
+export type ErrorHandler = (server: Server, err: Error) => Promise<void>
+
 export class Server {
   private host: string;
   private port: number;
   private server: net.Server;
   private clients: { [address: string]: Client };
   private services: ServiceSet;
+
+  // TODO: PromiseGroup
 
   constructor(host: string, port: number) {
     this.host = host;
@@ -20,37 +25,42 @@ export class Server {
     this.clients = {};
   }
 
-  public Start(): void {
+  public Start(handleConn: ConnHandler = this.handleConn): void {
     this.server.on('listening', () => {
       console.log(`Server listening at ${this.host}:${this.port}!`);
     });
 
-    this.server.on('connection', (socket: net.Socket) => {
-      let client = new Client(new JsonRpcCodec(socket), this.services, true);
-
-      this.register(client);
-
-      client.Start()
-        .catch((err: Error) => {
-          console.log(`Client ${client.GetPrefix()} ${err}`);
-        })
-        .then(() => {
-          console.log(`Client ${client.GetPrefix()} connection ended`);
-
-          client.Close();
-          this.unregister(client);
-        });
-    });
+    this.server.on('connection', handleConn.bind(this));
 
     this.server.on('error', (err: any) => {
-      console.log(`Server encountured  an error: ${err}`);
+      console.error(`Server encountured  an error: ${err}`);
     });
 
     this.server.on('close', (err: any) => {
-      console.log(`Server closed!`);
+      if (err != undefined) console.log('Server close failed: ${err}');
+      else console.log(`Server closed!`);
     });
 
     this.server.listen(this.port, this.host);
+  }
+
+  private handleConn(socket: net.Socket): Promise<void> {
+    let client = new Client(new JsonRpcCodec(socket), this.services, true);
+
+    this.register(client);
+
+    return client.Start()
+      .catch((err: Error) => {
+        console.error(
+          `Client ${client.GetPrefix()} failed:\n` +
+          `  ${err.name}: ${err.message}\n\n${err.stack}`);
+      })
+      .then(() => {
+        console.log(`Client ${client.GetPrefix()} connection ended`);
+
+        client.Close();
+        this.unregister(client);
+      });
   }
 
   public Close(): Promise<void> {
@@ -58,7 +68,8 @@ export class Server {
       console.log(`Closing Server listening at ${this.Address()}...`);
 
       this.server.close((err: any) => {
-        if (err != undefined) return reject(ServerError(`${err}`));
+        if (err != undefined)
+          return reject(ServerError(`${err}`));
 
         console.log(`Server listening at ${this.Address()} closed!`);
 

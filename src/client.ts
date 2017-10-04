@@ -1,7 +1,7 @@
 import * as net from 'net';
 import { Buffer } from 'buffer';
 
-import { Codec, Message, Request, Response } from './codec';
+import { Codec, Message, Request, Response, RpcError } from './codec';
 import { ServiceSet } from './service';
 import { ClientError, CodecError } from './error';
 
@@ -38,89 +38,103 @@ export class Client {
 
       console.log(`${this.prefix} started bidirectional RPC!`);
 
-      this.codec.on('data', this.handleMessage.bind(this));
+      this.codec.on('data', (msg: Message) => {
+        return this.handleMessage(msg)
+          .then(() => { })
+          .catch((err: Error) => { this.reject(err); });
+      });
       this.codec.on('error', (err: Error) => { reject(err); });
       this.codec.on('end', () => { resolve(); });
     });
   }
 
-  public Close(): void { this.codec.Close(); }
+  public Close(): void {
+    this.codec.Close();
+  }
 
   public Stop(): void {
-    // TODO: remove Client from Server's list
     this.Close();
     this.resolve();
   }
 
-  private handleMessage(msg: Message): void {
+  private handleMessage(msg: Message): Promise<void> {
     console.log(`${this.prefix} <- ${msg.toString()}`);
 
-    if (msg.IsRequest()) this.handleRequest(msg.req);
-    else if (msg.IsResponse()) this.handleResponse(msg.resp);
-    else this.reject(ClientError(
-      'Invalid Message: it is neither a Request nor a Response'));
+    if (msg.IsRequest()) return this.handleRequest(msg.req);
+    else if (msg.IsResponse()) return this.handleResponse(msg.resp);
+    else
+      return this.reject(ClientError(
+        'Invalid Message: it is neither a Request nor a Response'));
   }
 
-  private handleRequest(req: Request): void {
-    this.services.Exec(req.method, this, req.params)
-      .then((res: any) => {
-        if (req.id != undefined)
-          this.sendResponse({
-            id: req.id,
-            result: res
-          });
-      })
-      .catch((err: Error) => {
-        console.log(`${this.prefix} Service '${req.method}' Exec failed: ` +
-          `${err.name}: ${err.message}\n${err.stack}`);
+  private handleRequest(req: Request): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+      this.services.Exec(req.method, this, req.params)
+        .then((res: any) => {
+          if (req.id != undefined)
+            return this.sendResponse(req.id, res);
+        })
+        .catch((err: Error) => {
+          console.log(`${this.prefix} Service '${req.method}' Exec failed: ` +
+            `${err.name}: ${err.message}\n${err.stack}`);
 
-        if (req.id != undefined)
-          this.sendResponse({
-            id: req.id,
-            error: {
+          if (req.id != undefined)
+            return this.sendResponse(req.id, {
               code: 500,
               message: 'Server internal error',
               data: req
-            }
-          });
-      });
+            });
+        });
+    });
   }
 
-  private handleResponse(resp: Response): void {
+  private handleResponse(resp: Response): Promise<void> {
     let call = this.calls[resp.id];
 
     if (call == undefined)
-      return this.reject(ClientError(`Call not found`));
+      return this.reject(ClientError(`Call ${resp.id} not found`));
 
     delete this.calls[resp.id];
 
     if (resp.error == undefined)
-      call.Resolve(resp.result);
-    else
-      call.Reject({
-        name: 'ClientResponse',
-        message: resp.error.message
-      });
+      return call.Resolve(resp.result);
+
+    return call.Reject({
+      name: 'ClientResponse',
+      message: resp.error.message
+    });
   }
 
-  private sendRequest(req: Request): void {
-    if (req.params != undefined) {
-      let len = req.params.length;
-      if (len == 0) req.params = undefined;
-      else if (len == 1) req.params = req.params[0];
+  private sendRequest(
+    id: number | undefined, method: string, params?: any[]): Promise<void> {
+
+    if (params != undefined) {
+      let len = params.length;
+      if (len == 0) params = undefined;
+      else if (len == 1) params = params[0];
     }
 
-    this.send(new Message(req));
+    return this.send(new Message({
+      id: id,
+      method: method,
+      params: params
+    }));
   }
 
-  private sendResponse(resp: Response): void {
-    this.send(new Message(undefined, resp));
+  private sendResponse(
+    id: number, result?: any, err?: RpcError): Promise<void> {
+
+    return this.send(new Message(undefined, {
+      id: id,
+      result: result,
+      error: err
+    }));
   }
 
-  private send(msg: Message): void {
+  private send(msg: Message): Promise<void> {
     console.log(`${this.prefix} -> ${msg.toString()}`);
 
-    this.codec.Encode(msg);
+    return this.codec.Encode(msg);
   }
 
   public Call(name: string, ...params: any[]): Promise<any> {
@@ -129,20 +143,17 @@ export class Client {
 
     this.calls[id] = call;
 
-    this.sendRequest({
-      id: id,
-      method: name,
-      params: params
-    });
+    return this.sendRequest(id, name, params)
+      .then(() => { return call.Wait(); })
+      .catch((err: Error) => {
+        delete this.calls[id];
 
-    return call.Wait();
+        return call.Reject(err);
+      });
   }
 
-  public Notify(name: string, ...params: any[]): void {
-    this.sendRequest({
-      method: name,
-      params: params
-    });
+  public Notify(name: string, ...params: any[]): Promise<void> {
+    return this.sendRequest(undefined, name, params);
   }
 
   public GetPrefix(): string { return this.prefix; }
@@ -160,7 +171,17 @@ export class Call {
     });
   }
 
-  public Wait(): Promise<any> { return this.promise; }
-  public Resolve(res: any): void { this.resolve(res); }
-  public Reject(err: Error): void { this.reject(err); }
+  public Wait(): Promise<any> {
+    return this.promise;
+  }
+
+  public Resolve(res: any): Promise<void> {
+    this.resolve(res);
+    return this.promise;
+  }
+
+  public Reject(err: Error): Promise<void> {
+    this.reject(err);
+    return this.promise;
+  }
 }

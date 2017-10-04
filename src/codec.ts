@@ -12,11 +12,13 @@ export interface Request {
 export interface Response {
   id: number;
   result?: any;
-  error?: {
-    code: number,
-    message: string,
-    data: any
-  };
+  error?: RpcError;
+}
+
+export interface RpcError {
+  code: number,
+  message: string,
+  data: any
 }
 
 export class Message {
@@ -39,30 +41,34 @@ export class Message {
   public toString(): string {
     if (this.IsRequest()) return JSON.stringify(this.req);
     else if (this.IsResponse()) return JSON.stringify(this.resp);
-    else return 'Message is neither a Request nor a Response';
+    else return 'Error: Message is neither a Request nor a Response';
   }
 }
 
 export abstract class Codec extends EventEmitter {
   private socket: Socket;
+  private encoding: string;
 
-  abstract Encode(msg: Message): void
-  abstract Decode(str: string): Message
+  abstract Encode(msg: Message): Promise<void>
+  abstract Decode(buf: Buffer): Promise<Message>
 
-  constructor(socket: Socket) {
+  constructor(socket: Socket, encoding: string = 'UTF-8') {
     super();
 
     this.socket = socket;
+    this.encoding = encoding;
 
     this.socket.on('data', (buf: Buffer) => {
-      let message: Message;
+      let promise: Promise<Message>;
 
-      try { message = this.Decode(buf.toString()); } catch (err) {
+      try { promise = this.Decode(buf); } catch (err) {
         this.emit('error', CodecError(`${err}`));
         return;
       }
 
-      this.emit('data', message);
+      promise
+        .then((msg: Message) => { this.emit('data', msg); })
+        .catch((err: Error) => { this.emit('error', err); });
     });
 
     this.socket.on('error', (err: any) => {
@@ -74,11 +80,17 @@ export abstract class Codec extends EventEmitter {
     });
   }
 
-  protected Write(str: string): void {
-    this.socket.write(str, 'UTF8');
+  protected Write(str: string, encoding: string = this.encoding): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+      this.socket.write(str, encoding, () => { resolve(); });
+    });
   }
 
-  public Close(): void { this.socket.end(); }
+  public Close(): void {
+    this.socket.end();
+  }
 
-  public GetSocket(): Socket { return this.socket; }
+  public GetSocket(): Socket {
+    return this.socket;
+  }
 }
