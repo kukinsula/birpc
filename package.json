@@ -5,11 +5,11 @@
   "main": "app.js",
   "scripts": {
     "build": "tsc",
-    "start": "tsc && node src/app.js",
-    "pretest": "tsc test/*.ts --module commonjs --target es6",
-    "test": "./node_modules/.bin/mocha test/*.js",
-    "clean": "rm -fr src/*.js test/*.js doc/",
-    "stat": "wc -l src/*.ts"
+    "start": "tsc && node ./dist/app.js",
+    "pretest": "tsc test/*.ts --module commonjs --target es6 --outDir ./dist/test",
+    "test ": "./node_modules/.bin/mocha ./dist/test/*.js",
+    "clean": "rm -fr ./src/*.js ./test/*.js ./doc/",
+    "stat": "wc -l ./src/*.ts"
   },
   "author": "Texier-Atger Lucas",
   "license": "ISC",
