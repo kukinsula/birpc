@@ -45,8 +45,11 @@ export class Server {
   }
 
   private handleConn(socket: net.Socket): Promise<void> {
-    let client = new Client(new JsonRpcCodec(socket), this.services, true);
+    return this.HandleClient(new Client(
+      new JsonRpcCodec(socket), this.services, true));
+  }
 
+  public HandleClient(client: Client): Promise<void> {
     this.register(client);
 
     return client.Start()
@@ -87,7 +90,7 @@ export class Server {
           console.log(`Stoping ${addresses.length} clients...`);
 
           addresses.forEach((address: string) => {
-            this.clients[address].Stop();
+            this.clients[address].Close();
             this.unregister(this.clients[address]);
           });
 
