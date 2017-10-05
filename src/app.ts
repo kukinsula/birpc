@@ -1,6 +1,16 @@
 import { Server } from './server';
 import { Client } from './client';
 
+// TODO:
+//
+// * PromiseGroup (avec méthode Done(id: number))
+// * Server.Wait
+// * Client.Wait
+// * Client.cancelPendingCalls
+// * Server/Client EventEmitter
+// * Keep-Alive
+// * Timeout
+
 function main() {
   let server = new Server('127.0.0.1', 20000);
 

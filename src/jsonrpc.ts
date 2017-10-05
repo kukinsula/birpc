@@ -8,8 +8,8 @@ export class JsonRpcCodec extends Codec {
     super(socket);
   }
 
-  public Encode(msg: Message): Promise<void> {
-    return new Promise<void>((resolve, reject) => {
+  public Encode(msg: Message): Promise<boolean> {
+    return new Promise<boolean>((resolve, reject) => {
       let str = '';
 
       if (msg.IsRequest()) str = JSON.stringify(msg.req);
@@ -18,7 +18,7 @@ export class JsonRpcCodec extends Codec {
         'Message to encode is neither a Request nor a Response'));
 
       return this.Write(str)
-        .then(() => { resolve(); })
+        .then((flushed: boolean) => { resolve(flushed); })
         .catch((err: Error) => { reject(err); });
     });
   }

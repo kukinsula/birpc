@@ -19,7 +19,8 @@ export const
   ServerError = error('Server'),
   ClientError = error('Client'),
   CodecError = error('Codec'),
-  ServiceError = error('Service');
+  ServiceError = error('Service'),
+  CanceledCallError = error('Call');
 
 // export function ServiceError(code: number, message: string, data: any): Error {
 //   return error('Service')(``);
