@@ -15,8 +15,6 @@ export class Server {
   private clients: { [address: string]: Client };
   private services: ServiceSet;
 
-  // TODO: PromiseGroup
-
   constructor(host: string, port: number) {
     this.host = host;
     this.port = port;
@@ -45,11 +43,11 @@ export class Server {
   }
 
   private handleConn(socket: net.Socket): Promise<void> {
-    return this.HandleClient(new Client(
+    return this.Handle(new Client(
       new JsonRpcCodec(socket), this.services, true));
   }
 
-  public HandleClient(client: Client): Promise<void> {
+  public Handle(client: Client): Promise<void> {
     this.register(client);
 
     return client.Start()
@@ -59,10 +57,10 @@ export class Server {
           `  ${err.name}: ${err.message}\n\n${err.stack}`);
       })
       .then(() => {
-        console.log(`Client ${client.GetPrefix()} connection ended`);
-
         client.Close();
         this.unregister(client);
+
+        console.log(`Client ${client.GetPrefix()} connection closed!`);
       });
   }
 
