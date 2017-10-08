@@ -1,4 +1,5 @@
 import * as net from 'net';
+import { EventEmitter } from 'events';
 
 import { Client } from './client';
 import { ServiceSet, Service } from './service';
@@ -9,7 +10,7 @@ import { PromiseGroup, Result } from './promise';
 export type ConnHandler = (socket: net.Socket) => Promise<void>
 export type ErrorHandler = (server: Server, err: Error) => Promise<void>
 
-export class Server {
+export class Server extends EventEmitter {
   private host: string;
   private port: number;
   private server: net.Server;
@@ -18,6 +19,8 @@ export class Server {
   private group: PromiseGroup;
 
   constructor(host: string, port: number) {
+    super();
+
     this.host = host;
     this.port = port;
     this.clients = {};
@@ -27,9 +30,7 @@ export class Server {
   }
 
   public Start(handleConn: ConnHandler = this.handleConn): void {
-    this.server.on('listening', () => {
-      console.log(`Server listening at ${this.host}:${this.port}!`);
-    });
+    this.server.on('listening', () => { this.emit('listening'); });
 
     this.server.on('connection', (socket: net.Socket) => {
       let address = `${socket.remoteAddress}:${socket.remotePort}`;
@@ -37,25 +38,31 @@ export class Server {
       console.log(`Incoming connection from ${address}`);
 
       this.group.Add(handleConn.bind(this)(socket)
-        .catch((err: Error) => {
-          console.error(`Client ${address} failed:\n` +
-            `  ${err.name}: ${err.message}\n\n${err.stack}\n`);
-        })
         .then(() => {
+          socket.end();
+          console.log(`Connection ${address} ended`);
+        })
+        .catch((err: Error) => {
+          console.error(`Connection ${address} failed:\n` +
+            `  ${err.name}: ${err.message}\n\n${err.stack}\n`);
+
           socket.end();
           console.log(`Connection ${address} ended`);
         }));
 
-      // this.group.Add(handleConn.bind(this)(socket));
+      // TODO ???
+      //
+      // this.emit('connection', (socket: net.Socket) => {
+      //   this.emit('connection', socket);
+      // });
     });
 
     this.server.on('error', (err: any) => {
-      console.error(`Server encountured  an error: ${err}`);
+      this.emit('error', ServerError(err));
     });
 
     this.server.on('close', (err: any) => {
-      if (err != undefined) console.log('Server close failed: ${err}');
-      else console.log(`Server closed!`);
+      this.emit('close', ServerError(err));
     });
 
     this.server.listen(this.port, this.host);
@@ -71,13 +78,16 @@ export class Server {
 
     return client.Start()
       .then(() => { this.unregister(client); return client.Wait(); })
-      .then(() => { console.log(`Client ${client.GetPrefix()} connection closed!`); })
       .catch((err: Error) => {
         console.error(
           `Client ${client.GetPrefix()} failed:\n` +
           `  ${err.name}: ${err.message}\n\n${err.stack}\n`);
+
+        this.unregister(client);
+
+        return client.Wait();
       })
-      .then(() => { return client.Stop(); });
+      .then(() => { });
   }
 
   public Close(): Promise<void> {
@@ -96,8 +106,6 @@ export class Server {
       .then(() => {
         let addresses = Object.keys(this.clients);
 
-        console.log(`Stoping ${addresses.length} clients...`);
-
         // TODO: utiliser un PromiseGroup(Promise<any>[]) pour
         // attendre toutes les promesses
 
@@ -105,15 +113,28 @@ export class Server {
           this.unregister(this.clients[address]);
           return this.clients[address].Stop();
         }))
-          .then(() => { console.log(`Stopped ${addresses.length} clients!`); });
+          .then(() => { this.emit('shutdown'); });
       })
-      .catch((err: Error) => { return Promise.reject(err); });
+      .catch((err: Error) => {
+        this.emit('error', err);
+        return Promise.reject(err);
+      });
   }
 
   public Wait(timeout?: number): Promise<Result[]> {
     return this.Close()
-      .then(() => { return this.group.Wait(); })
-      .catch((err: Error) => { return Promise.reject(err); });
+      .then(() => {
+        this.emit('waiting', this.group);
+        return this.group.Wait();
+      })
+      .then((res: Result[]) => {
+        this.emit('wait', res);
+        return res;
+      })
+      .catch((err: Error) => {
+        this.emit('error', err);
+        return Promise.reject(err);
+      });
   }
 
   private register(client: Client): void {
