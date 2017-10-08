@@ -7,7 +7,7 @@
     "build": "tsc",
     "start": "tsc && node ./dist/app.js",
     "pretest": "tsc test/*.ts --module commonjs --target es6 --outDir ./dist/test",
-    "test ": "./node_modules/.bin/mocha ./dist/test/*.js",
+    "test ": "./node_modules/.bin/mocha ./dist/test/test/*.js",
     "clean": "rm -fr ./src/*.js ./test/*.js ./doc/",
     "stat": "wc -l ./src/*.ts"
   },

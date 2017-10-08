@@ -2,8 +2,9 @@ import * as net from 'net';
 import { Buffer } from 'buffer';
 
 import { Codec, Message, Request, Response, RpcError } from './codec';
-import { ClientError, CodecError, CanceledCallError } from './error';
+import { ClientError, CodecError } from './error';
 import { ServiceSet } from './service';
+import { PromiseGroup, Result } from './promise';
 
 export class Client {
   private codec: Codec;
@@ -12,6 +13,9 @@ export class Client {
   private calls: { [id: number]: Call };
   private server: boolean;
   private prefix: string;
+  private group: PromiseGroup;
+  private resolve: any;
+  private reject: any;
   public Address: string;
 
   constructor(codec: Codec, services?: ServiceSet, server: boolean = false) {
@@ -20,6 +24,7 @@ export class Client {
     this.id = 0;
     this.calls = {};
     this.server = server;
+    this.group = new PromiseGroup();
 
     let socket = codec.GetSocket();
     this.Address = server ?
@@ -31,6 +36,9 @@ export class Client {
 
   public Start(): Promise<void> {
     return new Promise<void>((resolve, reject) => {
+      this.resolve = resolve;
+      this.resolve = reject;
+
       console.log(`${this.prefix} started bidirectional RPC!`);
 
       this.codec.on('data', (msg: Message) => {
@@ -60,10 +68,9 @@ export class Client {
 
     if (msg.IsRequest()) promise = this.handleRequest(msg.req);
     else if (msg.IsResponse()) promise = this.handleResponse(msg.resp);
-    else {
+    else
       return Promise.reject(ClientError(
-        'Invalid Message: it is neither a Request nor a Response'));
-    }
+        'invalid Message: neither a Request nor a Response'));
 
     return promise;
   }
@@ -85,12 +92,12 @@ export class Client {
         .then((res: any) => { return done(res); })
         .catch((err: Error) => {
           console.log(`${this.prefix} Service '${req.method}' Exec failed: ` +
-            `${err.name}: ${err.message}\n${err.stack}\n`);
+            `${err.name}: ${err.message}\n${err.stack}\n\n`);
 
           return done({
             code: 500,
             message: 'Server internal error',
-            data: err
+            data: req
           });
         });
     });
@@ -117,8 +124,8 @@ export class Client {
     return Promise.resolve(true);
   }
 
-  private sendRequest(
-    id: number | undefined, method: string, params?: any[]): Promise<boolean> {
+  private sendRequest(id: number | undefined, method: string, params?: any[])
+    : Promise<boolean> {
 
     if (params != undefined) {
       let len = params.length;
@@ -133,8 +140,8 @@ export class Client {
     }));
   }
 
-  private sendResponse(
-    id: number, result?: any, err?: RpcError): Promise<boolean> {
+  private sendResponse(id: number, result?: any, err?: RpcError)
+    : Promise<boolean> {
 
     return this.send(new Message(undefined, {
       id: id,
@@ -156,12 +163,19 @@ export class Client {
     this.calls[id] = call;
 
     return this.sendRequest(id, method, params)
-      .then(() => { return call.Wait(); })
-      .catch((err: Error) => {
-        delete this.calls[id];
+      .then(() => {
+        let promise = call.Wait()
+          .then((v: any) => { delete this.calls[id]; })
+          .catch((err: Error) => {
+            delete this.calls[id];
+            return Promise.reject(err);
+          });
 
-        return call.Reject(err);
-      });
+        this.group.Add(promise);
+
+        return promise;
+      })
+      .catch((err: Error) => { delete this.calls[id]; return call.Reject(err); });
   }
 
   public Notify(method: string, ...params: any[]): Promise<boolean> {
@@ -170,9 +184,16 @@ export class Client {
 
   public GetPrefix(): string { return this.prefix; }
 
+  public Stop(): Promise<void> {
+    return this.codec.Close()
+      .then(() => { this.resolve(); })
+      .catch((err: Error) => { this.reject(err); return Promise.reject(err); });
+  }
 
-  public Close(): void {
-    this.codec.Close();
+  public Wait(): Promise<Result[]> {
+    return this.Stop()
+      .then(() => { return this.group.Wait(); })
+      .catch((err: Error) => { return Promise.reject(err); });
   }
 
   private cancelPendingCalls(): Promise<void> {
@@ -184,7 +205,7 @@ export class Client {
           calls.push(this.calls[id]);
 
       return Promise.all(calls.map((call: Call) => {
-        return call.Reject(CanceledCallError('Call was canceled'));
+        return call.Reject(ClientError('Call was canceled'));
       }))
         .then(() => { resolve(); })
         .catch((err: Error) => { reject(err); });

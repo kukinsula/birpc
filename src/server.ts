@@ -4,6 +4,7 @@ import { Client } from './client';
 import { ServiceSet, Service } from './service';
 import { ServerError } from './error';
 import { JsonRpcCodec } from './jsonrpc';
+import { PromiseGroup, Result } from './promise';
 
 export type ConnHandler = (socket: net.Socket) => Promise<void>
 export type ErrorHandler = (server: Server, err: Error) => Promise<void>
@@ -14,13 +15,15 @@ export class Server {
   private server: net.Server;
   private clients: { [address: string]: Client };
   private services: ServiceSet;
+  private group: PromiseGroup;
 
   constructor(host: string, port: number) {
     this.host = host;
     this.port = port;
+    this.clients = {};
     this.server = new net.Server();
     this.services = new ServiceSet();
-    this.clients = {};
+    this.group = new PromiseGroup();
   }
 
   public Start(handleConn: ConnHandler = this.handleConn): void {
@@ -28,7 +31,23 @@ export class Server {
       console.log(`Server listening at ${this.host}:${this.port}!`);
     });
 
-    this.server.on('connection', handleConn.bind(this));
+    this.server.on('connection', (socket: net.Socket) => {
+      let address = `${socket.remoteAddress}:${socket.remotePort}`;
+
+      console.log(`Incoming connection from ${address}`);
+
+      this.group.Add(handleConn.bind(this)(socket)
+        .catch((err: Error) => {
+          console.error(`Client ${address} failed:\n` +
+            `  ${err.name}: ${err.message}\n\n${err.stack}\n`);
+        })
+        .then(() => {
+          socket.end();
+          console.log(`Connection ${address} ended`);
+        }));
+
+      // this.group.Add(handleConn.bind(this)(socket));
+    });
 
     this.server.on('error', (err: any) => {
       console.error(`Server encountured  an error: ${err}`);
@@ -43,36 +62,29 @@ export class Server {
   }
 
   private handleConn(socket: net.Socket): Promise<void> {
-    return this.Handle(new Client(
+    return this.Serve(new Client(
       new JsonRpcCodec(socket), this.services, true));
   }
 
-  public Handle(client: Client): Promise<void> {
+  public Serve(client: Client): Promise<void> {
     this.register(client);
 
     return client.Start()
+      .then(() => { this.unregister(client); return client.Wait(); })
+      .then(() => { console.log(`Client ${client.GetPrefix()} connection closed!`); })
       .catch((err: Error) => {
         console.error(
           `Client ${client.GetPrefix()} failed:\n` +
-          `  ${err.name}: ${err.message}\n\n${err.stack}`);
+          `  ${err.name}: ${err.message}\n\n${err.stack}\n`);
       })
-      .then(() => {
-        client.Close();
-        this.unregister(client);
-
-        console.log(`Client ${client.GetPrefix()} connection closed!`);
-      });
+      .then(() => { return client.Stop(); });
   }
 
   public Close(): Promise<void> {
     return new Promise<void>((resolve, reject) => {
-      console.log(`Closing Server listening at ${this.Address()}...`);
-
       this.server.close((err: any) => {
         if (err != undefined)
           return reject(ServerError(`${err}`));
-
-        console.log(`Server listening at ${this.Address()} closed!`);
 
         resolve();
       });
@@ -80,24 +92,28 @@ export class Server {
   }
 
   public Shutdown(): Promise<void> {
-    return new Promise<void>((resolve, reject) => {
-      return this.Close()
-        .then(() => {
-          let addresses = Object.keys(this.clients);
+    return this.Close()
+      .then(() => {
+        let addresses = Object.keys(this.clients);
 
-          console.log(`Stoping ${addresses.length} clients...`);
+        console.log(`Stoping ${addresses.length} clients...`);
 
-          addresses.forEach((address: string) => {
-            this.clients[address].Close();
-            this.unregister(this.clients[address]);
-          });
+        // TODO: utiliser un PromiseGroup(Promise<any>[]) pour
+        // attendre toutes les promesses
 
-          console.log(`Closed ${addresses.length} clients!`);
+        return Promise.all(addresses.map((address: string) => {
+          this.unregister(this.clients[address]);
+          return this.clients[address].Stop();
+        }))
+          .then(() => { console.log(`Stopped ${addresses.length} clients!`); });
+      })
+      .catch((err: Error) => { return Promise.reject(err); });
+  }
 
-          resolve();
-        })
-        .catch((err: Error) => { reject(err); });
-    });
+  public Wait(timeout?: number): Promise<Result[]> {
+    return this.Close()
+      .then(() => { return this.group.Wait(); })
+      .catch((err: Error) => { return Promise.reject(err); });
   }
 
   private register(client: Client): void {

@@ -80,8 +80,8 @@ export abstract class Codec extends EventEmitter {
     });
   }
 
-  protected Write(
-    str: string, encoding: string = this.encoding): Promise<boolean> {
+  protected Write(str: string, encoding: string = this.encoding)
+    : Promise<boolean> {
 
     return new Promise<boolean>((resolve, reject) => {
       let flushed = this.socket.write(str, encoding, () => {
@@ -90,9 +90,13 @@ export abstract class Codec extends EventEmitter {
     });
   }
 
-  public Close(): void {
-    this.socket.end();
-    this.emit('end');
+  public Close(): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+      this.socket.end();
+      this.emit('end');
+
+      resolve;
+    });
   }
 
   public GetSocket(): Socket {
