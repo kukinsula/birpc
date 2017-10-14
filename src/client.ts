@@ -18,7 +18,7 @@ export class Client {
   private reject: any;
   public Address: string;
 
-  constructor(codec: Codec, services?: ServiceSet, server: boolean = false) {
+  constructor(codec: Codec, server: boolean = false, services?: ServiceSet) {
     this.codec = codec;
     this.services = services || new ServiceSet();
     this.id = 0;
@@ -210,6 +210,10 @@ export class Client {
         .then(() => { resolve(); })
         .catch((err: Error) => { reject(err); });
     });
+  }
+
+  public SetServices(services: ServiceSet): void {
+    this.services = services;
   }
 }
 

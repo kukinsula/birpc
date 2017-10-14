@@ -95,7 +95,7 @@ export abstract class Codec extends EventEmitter {
       this.socket.end();
       this.emit('end');
 
-      resolve;
+      resolve();
     });
   }
 

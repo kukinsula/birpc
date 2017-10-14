@@ -2,6 +2,7 @@ import * as net from 'net';
 
 import { Server } from './server';
 import { Client } from './client';
+import { JsonRpcCodec } from './jsonrpc';
 import { PromiseGroup, Result } from './promise';
 
 // TODO:
@@ -15,43 +16,38 @@ import { PromiseGroup, Result } from './promise';
 //   * Cancel a Wait
 //
 // * Server prefix dans les logs
-// * Server.Wait
-// * Client.Wait
-// * Client.cancelPendingCalls
 // * Keep-Alive
 // * Timeout
 
 function main() {
-  let address = '127.0.0.1';
+  let hostname = '127.0.0.1';
   let port = 20000;
+  let address = hostname + ':' + port
 
-  let server = new Server(address, port);
+  let server = new Server(hostname, port);
 
-  server.on('listening', () => { console.log(`Server listening at ${address}:${port}`); });
+  server.on('listening', () => { console.log(`Server listening at ${address}`); });
   server.on('error', (err: Error) => { console.log(`Server error: ${err}`); });
-  server.on('close', () => { console.log(`Server listening at ${address}:${port} closed`); });
-  server.on('shutdown', () => { console.log(`Server listening at ${address}:${port} shutdown`); });
+  server.on('close', (err: Error) => { console.log(`Server listening at ${address} closed: ${err}`); });
+  server.on('shutdown', () => { console.log(`Server listening at ${address} shutdown`); });
   server.on('waiting', (group: PromiseGroup) => { console.log(`Waiting for ${group.Size()} connections...`); });
   server.on('wait', (res: Result[]) => { console.log(`Done!`); });
 
-  // server.on('connection', (socket: net.Socket) => {
-  //   let address = `${socket.remoteAddress}:${socket.remotePort}`;
+  server.on('connection', (socket: net.Socket) => {
+    let remoteAddress = `${socket.remoteAddress}:${socket.remotePort}`;
 
-  //   console.log(`Incoming connection from ${address}`);
+    console.log(`${address} Incoming connection from ${remoteAddress}`);
 
-  //         // this.group.Add(handleConn.bind(this)(socket)
-  //     .then(() => {
-  //       socket.end();
-  //       console.log(`Connection ${address} ended`);
-  //     })
-  //     .catch((err: Error) => {
-  //       console.error(`Connection ${address} failed:\n` +
-  //         `  ${err.name}: ${err.message}\n\n${err.stack}\n`);
-
-  //       socket.end();
-  //       console.log(`Connection ${address} ended`);
-  //     }));
-  // });
+    return server.Serve(new Client(new JsonRpcCodec(socket), true))
+      .catch((err: Error) => {
+        console.error(`Conn ${remoteAddress} failed:\n` +
+          `  ${err.name}: ${err.message}\n\n${err.stack}\n`);
+      })
+      .then(() => {
+        socket.end();
+        console.error(`Conn ${remoteAddress} ended`);
+      })
+  });
 
   server.Add('Add', (client: Client, args: any): Promise<any> => {
     return new Promise<number>((resolve, reject) => {
@@ -59,7 +55,7 @@ function main() {
         resolve(args.reduce((acc: number, current: number) => {
           return acc + current;
         }, 0));
-      }, 5000);
+      }, 2000);
     });
   });
 

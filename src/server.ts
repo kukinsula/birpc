@@ -4,6 +4,7 @@ import { EventEmitter } from 'events';
 import { Client } from './client';
 import { ServiceSet, Service } from './service';
 import { ServerError } from './error';
+import { Codec } from './codec';
 import { JsonRpcCodec } from './jsonrpc';
 import { PromiseGroup, Result } from './promise';
 
@@ -29,73 +30,55 @@ export class Server extends EventEmitter {
     this.group = new PromiseGroup();
   }
 
-  public Start(handleConn: ConnHandler = this.handleConn): void {
+  public Start(): void {
     this.server.on('listening', () => { this.emit('listening'); });
+    this.server.on('error', (err: any) => { this.emit('error', ServerError(err)); });
+    this.server.on('close', (err: any) => { this.emit('close', ServerError(err)); });
 
     this.server.on('connection', (socket: net.Socket) => {
-      let address = `${socket.remoteAddress}:${socket.remotePort}`;
-
-      console.log(`Incoming connection from ${address}`);
-
-      this.group.Add(handleConn.bind(this)(socket)
-        .then(() => {
-          socket.end();
-          console.log(`Connection ${address} ended`);
-        })
-        .catch((err: Error) => {
-          console.error(`Connection ${address} failed:\n` +
-            `  ${err.name}: ${err.message}\n\n${err.stack}\n`);
-
-          socket.end();
-          console.log(`Connection ${address} ended`);
-        }));
-
-      // TODO ???
-      //
-      // this.emit('connection', (socket: net.Socket) => {
-      //   this.emit('connection', socket);
-      // });
-    });
-
-    this.server.on('error', (err: any) => {
-      this.emit('error', ServerError(err));
-    });
-
-    this.server.on('close', (err: any) => {
-      this.emit('close', ServerError(err));
+      this.emit('connection', socket);
     });
 
     this.server.listen(this.port, this.host);
   }
 
-  private handleConn(socket: net.Socket): Promise<void> {
-    return this.Serve(new Client(
-      new JsonRpcCodec(socket), this.services, true));
-  }
+  public Serve(client: Client): Promise<Client> {
+    return new Promise<Client>((resolve, reject) => {
+      client.SetServices(this.services);
 
-  public Serve(client: Client): Promise<void> {
-    this.register(client);
+      this.register(client);
 
-    return client.Start()
-      .then(() => { this.unregister(client); return client.Wait(); })
-      .catch((err: Error) => {
-        console.error(
-          `Client ${client.GetPrefix()} failed:\n` +
-          `  ${err.name}: ${err.message}\n\n${err.stack}\n`);
+      let done = ((err?: Error) => {
+        return client.Wait()
+          .then((res: Result[]) => {
+            this.unregister(client);
 
-        this.unregister(client);
+            if (err != undefined)
+              return reject(err);
 
-        return client.Wait();
-      })
-      .then(() => { });
+            resolve(client);
+          })
+          .catch((err: Error) => {
+            this.unregister(client);
+            reject(err);
+          });
+      });
+
+      client.Start()
+        .then(() => { done(); })
+        .catch((err: Error) => { done(err); });
+    });
   }
 
   public Close(): Promise<void> {
     return new Promise<void>((resolve, reject) => {
       this.server.close((err: any) => {
-        if (err != undefined)
+        if (err != undefined) {
+          this.emit('close', ServerError(err));
           return reject(ServerError(`${err}`));
+        }
 
+        this.emit('close');
         resolve();
       });
     });
