@@ -8,17 +8,21 @@ import { PromiseGroup, Result } from './promise';
 
 // TODO:
 //
-// * Server/Client EventEmitter
-//   Server Events: listening, connection, error, close, end, shutdown, wait
-//   Client Events: start, stop, error, close, end, wait, send
+// * Service prend en premier argument un sous type de Client:
+//     Exec(client: <T extends Client>, ...)
+//
+// * Client: pour se débarasser des Promesses Start/Stop/handlemessage
+//   utiliser l'EventEmitter (events: receive => client.Process(msg))
 //
 // * PromiseGroup:
 //   * Constructor avec un Promise<any>[]
 //   * Cancel a Wait
 //
-// * Server prefix dans les logs
-// * Keep-Alive
-// * Timeout
+// * WaitTimeout: PromiseGroup => Server + Client
+//
+// * Server / Client: Config
+//
+// * Client.Call(timeout)
 
 function main() {
   let hostname = '127.0.0.1';
@@ -40,12 +44,24 @@ function main() {
 
   server.on('connection', (socket: net.Socket) => {
     let remoteAddress = `${socket.remoteAddress}:${socket.remotePort}`;
-    let client = new Client(new JsonRpcCodec(socket), true);
+    let client = new Client({
+      codec: new JsonRpcCodec(socket),
+      server: true,
+      timeout: 20000,
+      keepALiveDelay: 10000
+    });
+
+    let done = (() => {
+      client.Wait()
+        .then((res: Result[]) => { })
+        .catch((err: Error) => { });
+    });
+
+    let timer: NodeJS.Timer;
 
     console.log(`${address} Incoming connection from ${remoteAddress}`);
 
     client.on('start', () => { console.log(`${client.Prefix} started bidirectional RPC!`); });
-    client.once('end', () => { console.error(`${client.Prefix} ended!`); });
     client.on('receive', (msg: Message) => { console.log(`${client.Prefix} <- ${msg.toString()}`); });
     client.on('send', (msg: Message) => { console.log(`${client.Prefix} -> ${msg.toString()}`); });
 
@@ -53,7 +69,7 @@ function main() {
       console.error(`${client.Prefix} failed:\n` +
         `  ${err.name}: ${err.message}\n${err.stack}`);
 
-      client.Wait();
+      done();
     });
 
     client.on('service', (err: Error, req: Request) => {
@@ -61,10 +77,20 @@ function main() {
         `${err.name}: ${err.message}\n${err.stack}\n\n`);
     });
 
+    client.once('timeout', () => {
+      console.log(`${client.Prefix} timeout!`);
+      done();
+    });
+
+    client.once('end', () => {
+      clearInterval(timer);
+      console.log(`${client.Prefix} ended!`);
+    });
+
     return server.Serve(client)
   });
 
-  server.Add('Add', (client: Client, args: any): Promise<any> => {
+  server.Add('add', (client: Client, args: any): Promise<any> => {
     return new Promise<number>((resolve, reject) => {
       setTimeout(() => {
         resolve(args.reduce((acc: number, current: number) => {
@@ -74,7 +100,7 @@ function main() {
     });
   });
 
-  server.Add('Mult', (client: Client, args: any): Promise<any> => {
+  server.Add('mult', (client: Client, args: any): Promise<any> => {
     return Promise.resolve(args.reduce((acc: number, current: number) => {
       return acc * current;
     }, 1));

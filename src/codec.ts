@@ -34,6 +34,10 @@ export class Message {
     return this.req != undefined && this.req.method != '';
   }
 
+  public IsNotification(): boolean {
+    return this.IsRequest() && this.req.id == undefined;
+  }
+
   public IsResponse(): boolean {
     return this.resp != undefined && !this.IsRequest();
   }
@@ -86,6 +90,7 @@ export abstract class Codec extends EventEmitter {
   public Close(): Promise<void> {
     return new Promise<void>((resolve, reject) => {
       this.socket.end();
+      this.socket.destroy();
       this.emit('end');
 
       resolve();

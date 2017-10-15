@@ -7,6 +7,14 @@ import { ClientError, CodecError } from './error';
 import { ServiceSet } from './service';
 import { PromiseGroup, Result } from './promise';
 
+export interface ClientConfig {
+  codec: Codec
+  server?: boolean
+  services?: ServiceSet
+  timeout?: number
+  keepALiveDelay?: number
+}
+
 export class Client extends EventEmitter {
   private codec: Codec;
   private services: ServiceSet;
@@ -19,22 +27,30 @@ export class Client extends EventEmitter {
   public Address: string;
   public Prefix: string;
 
-  constructor(codec: Codec, server: boolean = false, services?: ServiceSet) {
+  constructor(config: ClientConfig) {
     super();
 
-    this.codec = codec;
-    this.services = services || new ServiceSet();
+    this.codec = config.codec;
+    this.services = config.services || new ServiceSet();
     this.id = 0;
     this.calls = {};
-    this.server = server;
+    this.server = config.server || false;
     this.group = new PromiseGroup();
 
-    let socket = codec.GetSocket();
-    this.Address = server ?
+    let socket = this.codec.GetSocket();
+    this.Address = this.server ?
       `${socket.remoteAddress}:${socket.remotePort}` :
       `${socket.localAddress}:${socket.localPort}`;
 
-    this.Prefix = (server ? 'Client* ' : 'Client ') + this.Address;
+    this.Prefix = (this.server ? 'Client* ' : 'Client ') + this.Address;
+
+    if (config.timeout != undefined) {
+      socket.setTimeout(config.timeout);
+      socket.on('timeout', () => { this.emit('timeout') });
+    }
+
+    if (config.keepALiveDelay != undefined)
+      socket.setKeepAlive(true, config.keepALiveDelay)
   }
 
   public Start(): Promise<void> {
@@ -171,7 +187,7 @@ export class Client extends EventEmitter {
     return this.sendRequest(id, method, params)
       .then(() => {
         let promise = call.Wait()
-          .then((v: any) => { delete this.calls[id]; })
+          .then((res: any) => { delete this.calls[id]; return res; })
           .catch((err: Error) => {
             delete this.calls[id];
             return Promise.reject(err);
