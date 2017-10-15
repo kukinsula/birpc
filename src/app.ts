@@ -2,6 +2,7 @@ import * as net from 'net';
 
 import { Server } from './server';
 import { Client } from './client';
+import { Message, Request } from './codec';
 import { JsonRpcCodec } from './jsonrpc';
 import { PromiseGroup, Result } from './promise';
 
@@ -28,25 +29,39 @@ function main() {
 
   server.on('listening', () => { console.log(`Server listening at ${address}`); });
   server.on('error', (err: Error) => { console.log(`Server error: ${err}`); });
-  server.on('close', (err: Error) => { console.log(`Server listening at ${address} closed: ${err}`); });
   server.on('shutdown', () => { console.log(`Server listening at ${address} shutdown`); });
   server.on('waiting', (group: PromiseGroup) => { console.log(`Waiting for ${group.Size()} connections...`); });
   server.on('wait', (res: Result[]) => { console.log(`Done!`); });
 
+  server.once('close', (err: Error) => {
+    console.log(`Server listening at ${address} closed` +
+      (err == undefined ? '' : `: ${err}`));
+  });
+
   server.on('connection', (socket: net.Socket) => {
     let remoteAddress = `${socket.remoteAddress}:${socket.remotePort}`;
+    let client = new Client(new JsonRpcCodec(socket), true);
 
     console.log(`${address} Incoming connection from ${remoteAddress}`);
 
-    return server.Serve(new Client(new JsonRpcCodec(socket), true))
-      .catch((err: Error) => {
-        console.error(`Conn ${remoteAddress} failed:\n` +
-          `  ${err.name}: ${err.message}\n\n${err.stack}\n`);
-      })
-      .then(() => {
-        socket.end();
-        console.error(`Conn ${remoteAddress} ended`);
-      })
+    client.on('start', () => { console.log(`${client.Prefix} started bidirectional RPC!`); });
+    client.once('end', () => { console.error(`${client.Prefix} ended!`); });
+    client.on('receive', (msg: Message) => { console.log(`${client.Prefix} <- ${msg.toString()}`); });
+    client.on('send', (msg: Message) => { console.log(`${client.Prefix} -> ${msg.toString()}`); });
+
+    client.on('error', (err: Error) => {
+      console.error(`${client.Prefix} failed:\n` +
+        `  ${err.name}: ${err.message}\n${err.stack}`);
+
+      client.Wait();
+    });
+
+    client.on('service', (err: Error, req: Request) => {
+      console.log(`${client.Prefix} Service '${req.method}' Exec failed: ` +
+        `${err.name}: ${err.message}\n${err.stack}\n\n`);
+    });
+
+    return server.Serve(client)
   });
 
   server.Add('Add', (client: Client, args: any): Promise<any> => {

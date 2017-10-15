@@ -32,8 +32,12 @@ export class Server extends EventEmitter {
 
   public Start(): void {
     this.server.on('listening', () => { this.emit('listening'); });
-    this.server.on('error', (err: any) => { this.emit('error', ServerError(err)); });
-    this.server.on('close', (err: any) => { this.emit('close', ServerError(err)); });
+    this.server.on('error', (err: any) => {
+      this.emit('error', err == undefined ? undefined : ServerError(err));
+    });
+    this.server.on('close', (err: any) => {
+      this.emit('close', err == undefined ? undefined : ServerError(err));
+    });
 
     this.server.on('connection', (socket: net.Socket) => {
       this.emit('connection', socket);

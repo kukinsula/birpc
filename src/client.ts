@@ -1,24 +1,27 @@
 import * as net from 'net';
 import { Buffer } from 'buffer';
+import { EventEmitter } from 'events';
 
 import { Codec, Message, Request, Response, RpcError } from './codec';
 import { ClientError, CodecError } from './error';
 import { ServiceSet } from './service';
 import { PromiseGroup, Result } from './promise';
 
-export class Client {
+export class Client extends EventEmitter {
   private codec: Codec;
   private services: ServiceSet;
   private id: number;
   private calls: { [id: number]: Call };
   private server: boolean;
-  private prefix: string;
   private group: PromiseGroup;
   private resolve: any;
   private reject: any;
   public Address: string;
+  public Prefix: string;
 
   constructor(codec: Codec, server: boolean = false, services?: ServiceSet) {
+    super();
+
     this.codec = codec;
     this.services = services || new ServiceSet();
     this.id = 0;
@@ -31,7 +34,7 @@ export class Client {
       `${socket.remoteAddress}:${socket.remotePort}` :
       `${socket.localAddress}:${socket.localPort}`;
 
-    this.prefix = (server ? 'Client* ' : 'Client ') + this.Address;
+    this.Prefix = (server ? 'Client* ' : 'Client ') + this.Address;
   }
 
   public Start(): Promise<void> {
@@ -39,30 +42,34 @@ export class Client {
       this.resolve = resolve;
       this.resolve = reject;
 
-      console.log(`${this.prefix} started bidirectional RPC!`);
-
       this.codec.on('data', (msg: Message) => {
         this.handleMessage(msg)
           .then(() => { })
-          .catch((err: Error) => { reject(err); });
+          .catch((err: Error) => { this.emit('error', err); reject(err); });
       });
 
       this.codec.on('error', (err: Error) => {
+        this.emit('error', err);
+
         this.cancelPendingCalls()
           .then(() => { reject(err); })
           .catch((err: Error) => { reject(err); });
       });
 
       this.codec.on('end', () => {
+        this.emit('end');
+
         this.cancelPendingCalls()
           .then(() => { resolve(); })
           .catch((err: Error) => { reject(err); });
       });
+
+      this.emit('start');
     });
   }
 
   private handleMessage(msg: Message): Promise<boolean> {
-    console.log(`${this.prefix} <- ${msg.toString()}`);
+    this.emit('receive', msg);
 
     let promise = Promise.resolve(true);
 
@@ -91,8 +98,7 @@ export class Client {
       return this.services.Exec(req.method, this, req.params)
         .then((res: any) => { return done(res); })
         .catch((err: Error) => {
-          console.log(`${this.prefix} Service '${req.method}' Exec failed: ` +
-            `${err.name}: ${err.message}\n${err.stack}\n\n`);
+          this.emit('service', err, req);
 
           return done({
             code: 500,
@@ -151,9 +157,9 @@ export class Client {
   }
 
   private send(msg: Message): Promise<boolean> {
-    console.log(`${this.prefix} -> ${msg.toString()}`);
-
-    return this.codec.Encode(msg);
+    return this.codec.Encode(msg)
+      .then((flushed: boolean) => { this.emit('send', msg); return flushed; })
+      .catch((err: Error) => { return Promise.reject(err); });
   }
 
   public Call(method: string, ...params: any[]): Promise<any> {
@@ -182,17 +188,21 @@ export class Client {
     return this.sendRequest(undefined, method, params);
   }
 
-  public GetPrefix(): string { return this.prefix; }
-
   public Stop(): Promise<void> {
     return this.codec.Close()
-      .then(() => { this.resolve(); })
+      .then(() => { this.resolve(); this.emit('stop'); })
       .catch((err: Error) => { this.reject(err); return Promise.reject(err); });
   }
 
   public Wait(): Promise<Result[]> {
+    this.emit('waiting');
+
     return this.Stop()
-      .then(() => { return this.group.Wait(); })
+      .then(() => {
+        return this.group.Wait()
+          .then((res: Result[]) => { this.emit('wait', res); return res; })
+          .catch((err: Error) => { return Promise.reject(err); });
+      })
       .catch((err: Error) => { return Promise.reject(err); });
   }
 

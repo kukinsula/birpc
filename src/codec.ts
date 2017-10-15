@@ -59,14 +59,7 @@ export abstract class Codec extends EventEmitter {
     this.encoding = encoding;
 
     this.socket.on('data', (buf: Buffer) => {
-      let promise: Promise<Message>;
-
-      try { promise = this.Decode(buf); } catch (err) {
-        this.emit('error', CodecError(`${err}`));
-        return;
-      }
-
-      promise
+      this.Decode(buf)
         .then((msg: Message) => { this.emit('data', msg); })
         .catch((err: Error) => { this.emit('error', err); });
     });
