@@ -25,11 +25,8 @@ import { PromiseGroup, Result } from './promise';
 // * Client.Call(timeout)
 
 function main() {
-  let hostname = '127.0.0.1';
-  let port = 20000;
-  let address = hostname + ':' + port
-
-  let server = new Server(hostname, port);
+  let server = new Server();
+  let address = server.Address();
 
   server.on('listening', () => { console.log(`Server listening at ${address}`); });
   server.on('error', (err: Error) => { console.log(`Server error: ${err}`); });

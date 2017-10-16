@@ -11,6 +11,12 @@ import { PromiseGroup, Result } from './promise';
 export type ConnHandler = (socket: net.Socket) => Promise<void>
 export type ErrorHandler = (server: Server, err: Error) => Promise<void>
 
+export interface ServerConfig {
+  host: string;
+  port: number;
+  services?: ServiceSet;
+}
+
 export class Server extends EventEmitter {
   private host: string;
   private port: number;
@@ -19,14 +25,21 @@ export class Server extends EventEmitter {
   private services: ServiceSet;
   private group: PromiseGroup;
 
-  constructor(host: string, port: number) {
+  constructor(config?: ServerConfig) {
     super();
 
-    this.host = host;
-    this.port = port;
+    if (config == undefined)
+      config = {
+        host: '127.0.0.1',
+        port: 20000,
+        services: new ServiceSet()
+      };
+
+    this.host = config.host;
+    this.port = config.port;
     this.clients = {};
     this.server = new net.Server();
-    this.services = new ServiceSet();
+    this.services = config.services || new ServiceSet();
     this.group = new PromiseGroup();
   }
 
