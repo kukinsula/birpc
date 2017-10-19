@@ -22,8 +22,6 @@ export class Client extends EventEmitter {
   private calls: { [id: number]: Call };
   private server: boolean;
   private group: PromiseGroup;
-  private resolve: any;
-  private reject: any;
   public Address: string;
   public Prefix: string;
 
@@ -53,40 +51,15 @@ export class Client extends EventEmitter {
       socket.setKeepAlive(true, config.keepALiveDelay)
   }
 
-  public Start(): Promise<void> {
-    return new Promise<void>((resolve, reject) => {
-      this.resolve = resolve;
-      this.resolve = reject;
+  public Start(): void {
+    this.codec.on('message', (msg: Message) => { this.emit('receive', msg); });
+    this.codec.on('error', (err: Error) => { this.emit('error', err); });
+    this.codec.on('end', () => { this.emit('end'); });
 
-      this.codec.on('data', (msg: Message) => {
-        this.handleMessage(msg)
-          .then(() => { })
-          .catch((err: Error) => { this.emit('error', err); reject(err); });
-      });
-
-      this.codec.on('error', (err: Error) => {
-        this.emit('error', err);
-
-        this.cancelPendingCalls()
-          .then(() => { reject(err); })
-          .catch((err: Error) => { reject(err); });
-      });
-
-      this.codec.on('end', () => {
-        this.emit('end');
-
-        this.cancelPendingCalls()
-          .then(() => { resolve(); })
-          .catch((err: Error) => { reject(err); });
-      });
-
-      this.emit('start');
-    });
+    this.emit('start');
   }
 
-  private handleMessage(msg: Message): Promise<boolean> {
-    this.emit('receive', msg);
-
+  public Process(msg: Message): Promise<boolean> {
     let promise = Promise.resolve(true);
 
     if (msg.IsRequest()) promise = this.handleRequest(msg.req);
@@ -204,17 +177,12 @@ export class Client extends EventEmitter {
     return this.sendRequest(undefined, method, params);
   }
 
-  public Stop(): Promise<void> {
-    return this.codec.Close()
-      .then(() => { this.resolve(); })
-      .catch((err: Error) => { this.reject(err); return Promise.reject(err); });
-  }
-
   public Wait(timeout?: number): Promise<Result[]> {
-    return this.Stop()
-      .then(() => {
-        return this.group.Wait(timeout)
-          .then((res: Result[]) => { return res; })
+    return this.cancelPendingCalls()
+      .then(() => { return this.group.Wait(timeout); })
+      .then((res: Result[]) => {
+        return this.codec.Close()
+          .then(() => { return res; })
           .catch((err: Error) => { return Promise.reject(err); });
       })
       .catch((err: Error) => { return Promise.reject(err); });
@@ -223,13 +191,14 @@ export class Client extends EventEmitter {
   private cancelPendingCalls(): Promise<void> {
     return new Promise<void>((resolve, reject) => {
       let calls: Call[] = [];
+      let err = ClientError('Call was canceled');
 
       for (let id in this.calls)
         if (this.calls.hasOwnProperty(id))
           calls.push(this.calls[id]);
 
       return Promise.all(calls.map((call: Call) => {
-        return call.Reject(ClientError('Call was canceled'));
+        return call.Reject(err);
       }))
         .then(() => { resolve(); })
         .catch((err: Error) => { reject(err); });

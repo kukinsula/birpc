@@ -64,7 +64,7 @@ export abstract class Codec extends EventEmitter {
 
     this.socket.on('data', (buf: Buffer) => {
       this.Decode(buf)
-        .then((msg: Message) => { this.emit('data', msg); })
+        .then((msg: Message) => { this.emit('message', msg); })
         .catch((err: Error) => { this.emit('error', err); });
     });
 
@@ -72,9 +72,7 @@ export abstract class Codec extends EventEmitter {
       this.emit('error', CodecError(`${err}`));
     });
 
-    this.socket.on('end', () => {
-      this.emit('end');
-    });
+    this.socket.on('end', () => { this.emit('end'); });
   }
 
   protected Write(str: string, encoding: string = this.encoding)

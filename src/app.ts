@@ -11,14 +11,11 @@ import { PromiseGroup, Result } from './promise';
 // * Service prend en premier argument un sous type de Client:
 //     Exec(client: <T extends Client>, ...)
 //
-// * Client: pour se débarasser des Promesses Start/Stop/handlemessage
-//   utiliser l'EventEmitter (events: receive => client.Process(msg))
+// * Fix WaitTimeout qui n'échoue pas quand le timeout est excédé
 //
 // * PromiseGroup:
 //   * Constructor avec un Promise<any>[]
 //   * Cancel a Wait
-//
-// * WaitTimeout: PromiseGroup => Server + Client
 //
 // * Client.Call(timeout)
 
@@ -60,12 +57,14 @@ function main() {
         });
     });
     client.on('start', () => { console.log(`${client.Prefix} started bidirectional RPC!`); });
-    client.on('receive', (msg: Message) => { console.log(`${client.Prefix} <- ${msg.toString()}`); });
+    client.on('receive', (msg: Message) => {
+      console.log(`${client.Prefix} <- ${msg.toString()}`);
+      client.Process(msg);
+    });
     client.on('send', (msg: Message) => { console.log(`${client.Prefix} -> ${msg.toString()}`); });
 
     client.on('error', (err: Error) => {
-      console.error(`${client.Prefix} failed:\n` +
-        `  ${err.name}: ${err.message}\n${err.stack}`);
+      console.error(`${client.Prefix} ${err.name}: ${err.message}\n${err.stack}`);
 
       done();
     });
@@ -80,9 +79,9 @@ function main() {
       done();
     });
 
-    client.once('end', () => { console.log(`${client.Prefix} ended!`); });
+    client.on('end', () => { console.log(`${client.Prefix} end!`); });
 
-    return server.Serve(client)
+    server.Serve(client)
   });
 
   server.Add('add', (client: Client, args: any): Promise<any> => {
@@ -103,7 +102,7 @@ function main() {
 
   server.Start();
 
-  process.on('SIGINT', () => {
+  process.once('SIGINT', () => {
     console.log('Exiting...');
 
     server.Wait(10000)

@@ -76,7 +76,9 @@ export class PromiseGroup {
 
     if (timeout != undefined)
       promises.push(new Promise<any>((resolve, reject) => {
+        console.log('XXXXXXXXX');
         timer = setTimeout(() => {
+          console.log('YYYYYYYYYY');
           reject(new Error('timeout'));
         }, timeout);
       }));

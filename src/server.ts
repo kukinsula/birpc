@@ -59,32 +59,10 @@ export class Server extends EventEmitter {
     this.server.listen(this.port, this.host);
   }
 
-  public Serve(client: Client): Promise<Client> {
-    return new Promise<Client>((resolve, reject) => {
-      client.SetServices(this.services);
-
-      this.register(client);
-
-      let done = ((err?: Error) => {
-        return client.Wait()
-          .then((res: Result[]) => {
-            this.unregister(client);
-
-            if (err != undefined)
-              return reject(err);
-
-            resolve(client);
-          })
-          .catch((err: Error) => {
-            this.unregister(client);
-            reject(err);
-          });
-      });
-
-      client.Start()
-        .then(() => { done(); })
-        .catch((err: Error) => { done(err); });
-    });
+  public Serve(client: Client): void {
+    client.SetServices(this.services);
+    this.register(client);
+    client.Start();
   }
 
   public Close(): Promise<void> {
@@ -97,7 +75,7 @@ export class Server extends EventEmitter {
     });
   }
 
-  public Shutdown(): Promise<void> {
+  public Shutdown(timeout?: number): Promise<void> {
     return this.Close()
       .then(() => {
         let addresses = Object.keys(this.clients);
@@ -107,7 +85,7 @@ export class Server extends EventEmitter {
 
         return Promise.all(addresses.map((address: string) => {
           this.unregister(this.clients[address]);
-          return this.clients[address].Stop();
+          return this.clients[address].Wait(timeout);
         }))
           .then(() => { })
           .catch((err: Error) => { return Promise.reject(err); });
@@ -117,7 +95,7 @@ export class Server extends EventEmitter {
 
   public Wait(timeout?: number): Promise<Result[]> {
     return this.Close()
-      .then(() => { return this.group.Wait(timeout); })
+      .then(() => { console.log('ICICICICICI'); return this.group.Wait(timeout); })
       .catch((err: Error) => { return Promise.reject(err); });
   }
 
