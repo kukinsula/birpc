@@ -90,12 +90,8 @@ export class Server extends EventEmitter {
   public Close(): Promise<void> {
     return new Promise<void>((resolve, reject) => {
       this.server.close((err: any) => {
-        if (err != undefined) {
-          this.emit('close', ServerError(err));
-          return reject(ServerError(`${err}`));
-        }
+        if (err != undefined) return reject(ServerError(`${err}`));
 
-        this.emit('close');
         resolve();
       });
     });
@@ -113,28 +109,16 @@ export class Server extends EventEmitter {
           this.unregister(this.clients[address]);
           return this.clients[address].Stop();
         }))
-          .then(() => { this.emit('shutdown'); });
+          .then(() => { })
+          .catch((err: Error) => { return Promise.reject(err); });
       })
-      .catch((err: Error) => {
-        this.emit('error', err);
-        return Promise.reject(err);
-      });
+      .catch((err: Error) => { return Promise.reject(err); });
   }
 
   public Wait(timeout?: number): Promise<Result[]> {
     return this.Close()
-      .then(() => {
-        this.emit('waiting', this.group);
-        return this.group.Wait();
-      })
-      .then((res: Result[]) => {
-        this.emit('wait', res);
-        return res;
-      })
-      .catch((err: Error) => {
-        this.emit('error', err);
-        return Promise.reject(err);
-      });
+      .then(() => { return this.group.Wait(timeout); })
+      .catch((err: Error) => { return Promise.reject(err); });
   }
 
   private register(client: Client): void {

@@ -206,17 +206,15 @@ export class Client extends EventEmitter {
 
   public Stop(): Promise<void> {
     return this.codec.Close()
-      .then(() => { this.resolve(); this.emit('stop'); })
+      .then(() => { this.resolve(); })
       .catch((err: Error) => { this.reject(err); return Promise.reject(err); });
   }
 
-  public Wait(): Promise<Result[]> {
-    this.emit('waiting');
-
+  public Wait(timeout?: number): Promise<Result[]> {
     return this.Stop()
       .then(() => {
-        return this.group.Wait()
-          .then((res: Result[]) => { this.emit('wait', res); return res; })
+        return this.group.Wait(timeout)
+          .then((res: Result[]) => { return res; })
           .catch((err: Error) => { return Promise.reject(err); });
       })
       .catch((err: Error) => { return Promise.reject(err); });

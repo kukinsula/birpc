@@ -67,34 +67,39 @@ export class PromiseGroup {
     });
   }
 
-  // TODO: merger Wait et WaitTimeout en une seule méthode
-  public Wait(): Promise<Result[]> {
+  public Wait(timeout?: number): Promise<Result[]> {
     if (this.state == Waiting) return Promise.reject('already waiting');
     if (this.state == None) return Promise.resolve([]);
+
+    let promises: Promise<any>[] = [];
+    let timer: NodeJS.Timer;
+
+    if (timeout != undefined)
+      promises.push(new Promise<any>((resolve, reject) => {
+        timer = setTimeout(() => {
+          reject(new Error('timeout'));
+        }, timeout);
+      }));
 
     this.state = Waiting;
 
     let merge = Object.assign(this.promises, this.results);
-    let promises: Promise<any>[] = [];
 
     for (let id = 0; id < this.size; id++)
       if (merge.hasOwnProperty(id))
         promises[id] = merge[id];
 
     return Promise.all(promises)
-      .then((results: Result[]) => { this.reset(); return results; });
-  }
-
-  public WaitTimeout(timeout: number): Promise<void> {
-    return new Promise<void>((resolve, reject) => {
-      let timer = setTimeout(() => {
-        reject('timeout exceeded');
-      }, timeout);
-
-      return this.Wait()
-        .then((results: Result[]) => { clearTimeout(timer); return results; })
-        .catch((err: Error) => { reject(err); })
-    });
+      .then((results: Result[]) => {
+        clearTimeout(timer);
+        this.reset();
+        return results;
+      })
+      .catch((err: Error) => {
+        clearTimeout(timer);
+        this.reset();
+        return Promise.reject(err);
+      });
   }
 
   public Size(): number {

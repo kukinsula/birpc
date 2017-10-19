@@ -20,8 +20,6 @@ import { PromiseGroup, Result } from './promise';
 //
 // * WaitTimeout: PromiseGroup => Server + Client
 //
-// * Server / Client: Config
-//
 // * Client.Call(timeout)
 
 function main() {
@@ -29,10 +27,11 @@ function main() {
   let address = server.Address();
 
   server.on('listening', () => { console.log(`Server listening at ${address}`); });
-  server.on('error', (err: Error) => { console.log(`Server error: ${err}`); });
-  server.on('shutdown', () => { console.log(`Server listening at ${address} shutdown`); });
-  server.on('waiting', (group: PromiseGroup) => { console.log(`Waiting for ${group.Size()} connections...`); });
-  server.on('wait', (res: Result[]) => { console.log(`Done!`); });
+  server.on('error', (err: Error) => {
+    console.log(`Server error: ${err}`);
+
+    return server.Shutdown();
+  });
 
   server.once('close', (err: Error) => {
     console.log(`Server listening at ${address} closed` +
@@ -41,23 +40,25 @@ function main() {
 
   server.on('connection', (socket: net.Socket) => {
     let remoteAddress = `${socket.remoteAddress}:${socket.remotePort}`;
+
+    console.log(`${address} Incoming connection from ${remoteAddress}`);
+
     let client = new Client({
       codec: new JsonRpcCodec(socket),
       server: true,
-      timeout: 20000,
+      // timeout: 20000,
       keepALiveDelay: 10000
     });
 
     let done = (() => {
-      client.Wait()
-        .then((res: Result[]) => { })
-        .catch((err: Error) => { });
+      client.Wait(5000)
+        .then((res: Result[]) => {
+          console.log(`${client.Prefix} waited for ${res.length} calls`);
+        })
+        .catch((err: Error) => {
+          console.error(`${client.Prefix} ${err.name}: ${err.message}\n${err.stack}`);
+        });
     });
-
-    let timer: NodeJS.Timer;
-
-    console.log(`${address} Incoming connection from ${remoteAddress}`);
-
     client.on('start', () => { console.log(`${client.Prefix} started bidirectional RPC!`); });
     client.on('receive', (msg: Message) => { console.log(`${client.Prefix} <- ${msg.toString()}`); });
     client.on('send', (msg: Message) => { console.log(`${client.Prefix} -> ${msg.toString()}`); });
@@ -79,10 +80,7 @@ function main() {
       done();
     });
 
-    client.once('end', () => {
-      clearInterval(timer);
-      console.log(`${client.Prefix} ended!`);
-    });
+    client.once('end', () => { console.log(`${client.Prefix} ended!`); });
 
     return server.Serve(client)
   });
@@ -108,7 +106,9 @@ function main() {
   process.on('SIGINT', () => {
     console.log('Exiting...');
 
-    return server.Wait();
+    server.Wait(10000)
+      .then((res: Result[]) => { console.log(`${address} waited for ${res.length} clients`); })
+      .catch((err: Error) => { console.log(`${address} ${err.name}: ${err.message}\n${err.stack}`); });
   });
 }
 
