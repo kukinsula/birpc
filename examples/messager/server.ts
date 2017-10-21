@@ -37,7 +37,7 @@ export class Server extends birpc.Server {
       }));
     });
 
-    this.Add('add', (client: birpc..Client, args: any): Promise<any> => {
+    this.Add('add', (client: Client, args: any): Promise<any> => {
       return new Promise<number>((resolve, reject) => {
         setTimeout(() => {
           resolve(args.reduce((acc: number, current: number) => {
@@ -47,7 +47,7 @@ export class Server extends birpc.Server {
       });
     });
 
-    this.Add('mult', (client: birpc..Client, args: any): Promise<any> => {
+    this.Add('mult', (client: Client, args: any): Promise<any> => {
       return Promise.resolve(args.reduce((acc: number, current: number) => {
         return acc * current;
       }, 1));

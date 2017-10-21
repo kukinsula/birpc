@@ -59,21 +59,15 @@ export class Client extends EventEmitter {
     this.emit('start');
   }
 
-  public Process<T extends Client>(
-    msg: Message,
-    client: T | Client = this): Promise<boolean> {
-
-    if (msg.IsRequest()) return this.handleRequest(msg.req, client);
+  public Process(msg: Message): Promise<boolean> {
+    if (msg.IsRequest()) return this.handleRequest(msg.req);
     else if (msg.IsResponse()) return this.handleResponse(msg.resp);
 
     return Promise.reject(ClientError(
       'invalid Message: neither a Request nor a Response'));
   }
 
-  private handleRequest<T extends Client>(
-    req: Request,
-    client: T | Client): Promise<boolean> {
-
+  private handleRequest(req: Request): Promise<boolean> {
     return new Promise<boolean>((resolve, reject) => {
       let done = ((body: any) => {
         if (req.id == undefined) { // if Notification
@@ -84,7 +78,7 @@ export class Client extends EventEmitter {
         return this.sendResponse(req.id, body);
       });
 
-      return this.services.Exec(req.method, client, req.params)
+      return this.services.Exec(req.method, this, req.params)
         .then((res: any) => { return done(res); })
         .catch((err: Error) => {
           this.emit('service', err, req);

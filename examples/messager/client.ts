@@ -4,15 +4,6 @@ export class Client extends birpc.Client {
   constructor(options: birpc.ClientConfig) {
     super(options);
 
-    let done = (() => {
-      this.Wait(5000)
-        .then((res: birpc.Result[]) => {
-          console.log(`${this.Prefix} waited for ${res.length} calls`);
-        })
-        .catch((err: Error) => {
-          console.error(`${this.Prefix} ${err.name}: ${err.message}\n${err.stack}`);
-        });
-    });
     this.on('start', () => {
       console.log(`${this.Prefix} started bidirectional RPC!`);
     });
@@ -27,7 +18,7 @@ export class Client extends birpc.Client {
     this.on('error', (err: Error) => {
       console.error(`${this.Prefix} ${err.name}: ${err.message}\n${err.stack}`);
 
-      done();
+      this.done();
     });
 
     this.on('service', (err: Error, req: Request) => {
@@ -37,11 +28,21 @@ export class Client extends birpc.Client {
 
     this.once('timeout', () => {
       console.log(`${this.Prefix} timeout!`);
-      done();
+      this.done();
     });
 
     this.on('end', () => {
       console.log(`${this.Prefix} end!`);
     });
   }
+
+  private done(): void {
+    this.Wait(5000)
+      .then((res: birpc.Result[]) => {
+        console.log(`${this.Prefix} waited for ${res.length} calls`);
+      })
+      .catch((err: Error) => {
+        console.error(`${this.Prefix} ${err.name}: ${err.message}\n${err.stack}`);
+      });
+  };
 }
