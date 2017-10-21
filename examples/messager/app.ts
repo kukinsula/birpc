@@ -23,12 +23,20 @@ import { Client } from './client';
 
 function main() {
   let server = new Server();
+  let timer: NodeJS.Timer;
+
+  server.on('close', () => {
+    if (timer != undefined)
+      clearTimeout(timer);
+
+    exit(0);
+  });
 
   server.Start();
 
   process.once('SIGINT', () => {
     console.log('Exiting...');
-    let timer = setTimeout(() => {
+    timer = setTimeout(() => {
       exit(2, new Error('Exit timeout'));
     }, 10000);
 
