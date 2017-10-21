@@ -1,20 +1,20 @@
 {
   "name": "birpc",
   "version": "1.0.0",
-  "description": "Bidirectional RPC Server",
+  "description": "Bidirectional RPC Server/Client",
   "main": "app.js",
   "scripts": {
     "build": "tsc",
     "start": "tsc && node ./dist/app.js",
     "pretest": "tsc test/*.ts --module commonjs --target es6 --outDir ./dist/test",
-    "test ": "./node_modules/.bin/mocha ./dist/test/test/*.js",
+    "test ": "./node_modules/mocha/bin/mocha ./dist/test/test/*.js",
     "clean": "rm -fr ./src/*.js ./test/*.js ./doc/",
     "stat": "wc -l ./src/*.ts"
   },
   "author": "Texier-Atger Lucas",
   "license": "ISC",
   "devDependencies": {
-    "@types/node": "^8.0.28",
+    "@types/node": "^8.0.46",
     "mocha": "^3.5.3"
   },
   "dependencies": {

@@ -52,26 +52,28 @@ export class Client extends EventEmitter {
   }
 
   public Start(): void {
-    this.codec.on('message', (msg: Message) => { this.emit('receive', msg); });
+    this.codec.on('receive', (msg: Message) => { this.emit('receive', msg); });
     this.codec.on('error', (err: Error) => { this.emit('error', err); });
     this.codec.on('end', () => { this.emit('end'); });
 
     this.emit('start');
   }
 
-  public Process(msg: Message): Promise<boolean> {
-    let promise = Promise.resolve(true);
+  public Process<T extends Client>(
+    msg: Message,
+    client: T | Client = this): Promise<boolean> {
 
-    if (msg.IsRequest()) promise = this.handleRequest(msg.req);
-    else if (msg.IsResponse()) promise = this.handleResponse(msg.resp);
-    else
-      return Promise.reject(ClientError(
-        'invalid Message: neither a Request nor a Response'));
+    if (msg.IsRequest()) return this.handleRequest(msg.req, client);
+    else if (msg.IsResponse()) return this.handleResponse(msg.resp);
 
-    return promise;
+    return Promise.reject(ClientError(
+      'invalid Message: neither a Request nor a Response'));
   }
 
-  private handleRequest(req: Request): Promise<boolean> {
+  private handleRequest<T extends Client>(
+    req: Request,
+    client: T | Client): Promise<boolean> {
+
     return new Promise<boolean>((resolve, reject) => {
       let done = ((body: any) => {
         if (req.id == undefined) { // if Notification
@@ -79,12 +81,10 @@ export class Client extends EventEmitter {
           return false;
         }
 
-        return this.sendResponse(req.id, body)
-          .then((flushed: boolean) => { resolve(flushed); return flushed; })
-          .catch((err: Error) => { reject(err); });
+        return this.sendResponse(req.id, body);
       });
 
-      return this.services.Exec(req.method, this, req.params)
+      return this.services.Exec(req.method, client, req.params)
         .then((res: any) => { return done(res); })
         .catch((err: Error) => {
           this.emit('service', err, req);
@@ -177,9 +177,14 @@ export class Client extends EventEmitter {
     return this.sendRequest(undefined, method, params);
   }
 
-  public Wait(timeout?: number): Promise<Result[]> {
+  public Stop(): Promise<void> {
     return this.cancelPendingCalls()
-      .then(() => { return this.group.Wait(timeout); })
+      .then(() => { this.codec.Close(); })
+      .catch((err: Error) => { return Promise.reject(err); });
+  }
+
+  public Wait(timeout?: number): Promise<Result[]> {
+    return this.group.Wait(timeout)
       .then((res: Result[]) => {
         return this.codec.Close()
           .then(() => { return res; })

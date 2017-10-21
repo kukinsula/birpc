@@ -2,7 +2,9 @@ type Status = string;
 
 export const
   Fulfilled: Status = 'Fulfilled',
-  Rejected: Status = 'Rejected';
+  Rejected: Status = 'Rejected',
+
+  TimeoutError = new Error('timeout');
 
 // TODO: classe Results ???
 //
@@ -29,8 +31,11 @@ export class PromiseGroup {
   private id: number;
   private size: number;
 
-  constructor() {
+  constructor(promises?: Promise<any>[]) {
     this.reset();
+
+    if (promises != undefined)
+      promises.forEach((promise: Promise<any>) => { this.Add(promise); });
   }
 
   private reset(): void {
@@ -79,7 +84,7 @@ export class PromiseGroup {
         console.log('XXXXXXXXX');
         timer = setTimeout(() => {
           console.log('YYYYYYYYYY');
-          reject(new Error('timeout'));
+          reject(TimeoutError);
         }, timeout);
       }));
 
@@ -93,13 +98,15 @@ export class PromiseGroup {
 
     return Promise.all(promises)
       .then((results: Result[]) => {
-        clearTimeout(timer);
+        if (timer != undefined) clearTimeout(timer);
         this.reset();
+
         return results;
       })
       .catch((err: Error) => {
-        clearTimeout(timer);
+        if (timer != undefined) clearTimeout(timer);
         this.reset();
+
         return Promise.reject(err);
       });
   }

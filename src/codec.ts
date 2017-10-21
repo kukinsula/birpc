@@ -64,7 +64,7 @@ export abstract class Codec extends EventEmitter {
 
     this.socket.on('data', (buf: Buffer) => {
       this.Decode(buf)
-        .then((msg: Message) => { this.emit('message', msg); })
+        .then((msg: Message) => { this.emit('receive', msg); })
         .catch((err: Error) => { this.emit('error', err); });
     });
 
@@ -77,6 +77,9 @@ export abstract class Codec extends EventEmitter {
 
   protected Write(str: string, encoding: string = this.encoding)
     : Promise<boolean> {
+
+    if (this.socket.destroyed)
+      return Promise.resolve(false);
 
     return new Promise<boolean>((resolve, reject) => {
       let flushed = this.socket.write(str, encoding, () => {

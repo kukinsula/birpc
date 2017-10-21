@@ -8,16 +8,23 @@ import { PromiseGroup, Result } from './promise';
 
 // TODO:
 //
-// * Service prend en premier argument un sous type de Client:
+// * Service sous type de Client comme argument:
 //     Exec(client: <T extends Client>, ...)
+//   Client.Process(msg: Message, client?: Client extends Client = this)
 //
 // * Fix WaitTimeout qui n'échoue pas quand le timeout est excédé
 //
 // * PromiseGroup:
-//   * Constructor avec un Promise<any>[]
 //   * Cancel a Wait
 //
-// * Client.Call(timeout)
+// * Client.Call(timeout?: number)
+//
+// * Errors wrap an error e.g ServerError(err: Error)
+//
+// * Server: gérer le unregister de client avec
+//     server.on('connection', (socket: net.Socket) => {
+//       socket.on('close', () => { this.underegister(socket.address); });
+//     });
 
 function main() {
   let server = new Server();
@@ -27,12 +34,26 @@ function main() {
   server.on('error', (err: Error) => {
     console.log(`Server error: ${err}`);
 
-    return server.Shutdown();
+    server.Shutdown()
+      .then(() => { exit(1, err); })
+      .catch((err: Error) => { exit(1, err); });
   });
 
   server.once('close', (err: Error) => {
     console.log(`Server listening at ${address} closed` +
       (err == undefined ? '' : `: ${err}`));
+
+    exit(0);
+  });
+
+  process.once('SIGINT', () => {
+    console.log('Exiting...');
+
+    let timer = setTimeout(() => {
+      exit(2, new Error('Exit timeout'));
+    }, 30000);
+
+    server.Close();
   });
 
   server.on('connection', (socket: net.Socket) => {
@@ -101,14 +122,13 @@ function main() {
   });
 
   server.Start();
+}
 
-  process.once('SIGINT', () => {
-    console.log('Exiting...');
+function exit(code: number, err?: Error) {
+  if (err != undefined)
+    console.log(`${err.stack}`);
 
-    server.Wait(10000)
-      .then((res: Result[]) => { console.log(`${address} waited for ${res.length} clients`); })
-      .catch((err: Error) => { console.log(`${address} ${err.name}: ${err.message}\n${err.stack}`); });
-  });
+  process.exit(code);
 }
 
 main();
