@@ -64,8 +64,8 @@ export class Server extends EventEmitter {
   public Shutdown(timeout?: number): Promise<void> {
     this.Close()
 
-    let group = new PromiseGroup(Object.keys(this.clients)
-      .map((address: string) => {
+    let group = new PromiseGroup(
+      Object.keys(this.clients).map((address: string) => {
         return this.clients[address].Stop();
       }));
 

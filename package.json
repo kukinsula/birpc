@@ -5,10 +5,10 @@
   "main": "app.js",
   "scripts": {
     "build": "tsc",
-    "start": "tsc && node ./dist/app.js",
+    "messager": "tsc && node ./dist/examples/messager/app.js",
     "pretest": "tsc test/*.ts --module commonjs --target es6 --outDir ./dist/test",
     "test ": "./node_modules/mocha/bin/mocha ./dist/test/test/*.js",
-    "clean": "rm -fr ./src/*.js ./test/*.js ./doc/",
+    "clean": "rm -rf ./dist/",
     "stat": "wc -l ./src/*.ts"
   },
   "author": "Texier-Atger Lucas",
