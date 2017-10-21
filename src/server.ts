@@ -42,6 +42,9 @@ export class Server extends EventEmitter {
     });
 
     this.server.on('connection', (socket: net.Socket) => {
+      socket.on('end', () => {
+        this.unregister(`${socket.remoteAddress}:${socket.remotePort}`);
+      });
       this.emit('connection', socket);
     });
 
@@ -50,7 +53,7 @@ export class Server extends EventEmitter {
 
   public Serve(client: Client): void {
     client.SetServices(this.services);
-    this.register(client);
+    this.register(client.Address, client);
     client.Start();
   }
 
@@ -71,12 +74,12 @@ export class Server extends EventEmitter {
       .catch((err: Error) => { return Promise.reject(err); });
   }
 
-  private register(client: Client): void {
-    this.clients[client.Address] = client;
+  private register(address: string, client: Client): void {
+    this.clients[address] = client;
   }
 
-  private unregister(client: Client): void {
-    delete this.clients[client.Address];
+  private unregister(address: string): void {
+    delete this.clients[address];
   }
 
   public Add(name: string, service: Service): void {
