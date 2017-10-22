@@ -68,8 +68,8 @@ export abstract class Codec extends EventEmitter {
         .catch((err: Error) => { this.emit('error', err); });
     });
 
-    this.socket.on('error', (err: any) => {
-      this.emit('error', CodecError(`${err}`));
+    this.socket.on('error', (err: Error) => {
+      this.emit('error', CodecError(err));
     });
 
     this.socket.on('end', () => { this.emit('end'); });

@@ -3,7 +3,7 @@ import { Buffer } from 'buffer';
 import { EventEmitter } from 'events';
 
 import { Codec, Message, Request, Response, RpcError } from './codec';
-import { ClientError, CodecError } from './error';
+import { ClientError, CodecError, ServiceError, CallError } from './error';
 import { ServiceSet } from './service';
 import { PromiseGroup, Result } from './promise';
 
@@ -53,8 +53,10 @@ export class Client extends EventEmitter {
 
   public Start(): void {
     this.codec.on('receive', (msg: Message) => { this.emit('receive', msg); });
-    this.codec.on('error', (err: Error) => { this.emit('error', err); });
     this.codec.on('end', () => { this.emit('end'); });
+    this.codec.on('error', (err: Error) => {
+      this.emit('error', ClientError(err));
+    });
 
     this.emit('start');
   }
@@ -113,8 +115,10 @@ export class Client extends EventEmitter {
     return Promise.resolve(true);
   }
 
-  private sendRequest(id: number | undefined, method: string, params?: any[])
-    : Promise<boolean> {
+  private sendRequest(
+    id: number | undefined,
+    method: string,
+    params?: any[]): Promise<boolean> {
 
     if (params != undefined) {
       let len = params.length;
@@ -129,8 +133,10 @@ export class Client extends EventEmitter {
     }));
   }
 
-  private sendResponse(id: number, result?: any, err?: RpcError)
-    : Promise<boolean> {
+  private sendResponse(
+    id: number,
+    result?: any,
+    err?: RpcError): Promise<boolean> {
 
     return this.send(new Message(undefined, {
       id: id,
@@ -142,7 +148,7 @@ export class Client extends EventEmitter {
   private send(msg: Message): Promise<boolean> {
     return this.codec.Encode(msg)
       .then((flushed: boolean) => { this.emit('send', msg); return flushed; })
-      .catch((err: Error) => { return Promise.reject(err); });
+      .catch((err: Error) => { return Promise.reject(ClientError(err)); });
   }
 
   public Call(method: string, ...params: any[]): Promise<any> {
@@ -157,7 +163,7 @@ export class Client extends EventEmitter {
           .then((res: any) => { delete this.calls[id]; return res; })
           .catch((err: Error) => {
             delete this.calls[id];
-            return Promise.reject(err);
+            return Promise.reject(ClientError(err));
           });
 
         this.group.Add(promise);
@@ -174,7 +180,7 @@ export class Client extends EventEmitter {
   public Stop(): Promise<void> {
     return this.cancelPendingCalls()
       .then(() => { this.codec.Close(); })
-      .catch((err: Error) => { return Promise.reject(err); });
+      .catch((err: Error) => { return Promise.reject(ClientError(err)); });
   }
 
   public Wait(timeout?: number): Promise<Result[]> {
@@ -182,9 +188,9 @@ export class Client extends EventEmitter {
       .then((res: Result[]) => {
         return this.codec.Close()
           .then(() => { return res; })
-          .catch((err: Error) => { return Promise.reject(err); });
+          .catch((err: Error) => { return Promise.reject(ClientError(err)); });
       })
-      .catch((err: Error) => { return Promise.reject(err); });
+      .catch((err: Error) => { return Promise.reject(ClientError(err)); });
   }
 
   private cancelPendingCalls(): Promise<void> {
@@ -231,7 +237,7 @@ export class Call {
   }
 
   public Reject(err: Error): Promise<void> {
-    this.reject(err);
+    this.reject(CallError(err));
     return this.promise;
   }
 }

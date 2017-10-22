@@ -14,8 +14,12 @@ export class JsonRpcCodec extends Codec {
 
       if (msg.IsRequest()) str = JSON.stringify(msg.req);
       else if (msg.IsResponse()) str = JSON.stringify(msg.resp);
-      else this.emit('error', CodecError(
-        'Message to encode is neither a Request nor a Response'));
+      else {
+        let err = CodecError('Message to encode is neither a Request nor a Response');
+        this.emit('error', err);
+
+        return reject(err);
+      }
 
       return this.Write(str)
         .then((flushed: boolean) => { resolve(flushed); })
@@ -29,7 +33,7 @@ export class JsonRpcCodec extends Codec {
       let raw: any = {};
 
       try { raw = JSON.parse(buf.toString()); } catch (err) {
-        return reject(CodecError(`${err}`));
+        return reject(CodecError(err));
       }
 
       if (raw.method != undefined && raw.method != '') {

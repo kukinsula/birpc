@@ -1,5 +1,4 @@
 import * as net from 'net';
-
 import { EventEmitter } from 'events';
 
 import { Client } from './client';
@@ -8,6 +7,8 @@ import { ServerError } from './error';
 import { Codec } from './codec';
 import { JsonRpcCodec } from './jsonrpc';
 import { PromiseGroup, Result } from './promise';
+
+require('source-map-support').install();
 
 export interface ServerConfig {
   host?: string;
@@ -34,11 +35,9 @@ export class Server extends EventEmitter {
 
   public Start(): void {
     this.server.on('listening', () => { this.emit('listening'); });
-    this.server.on('error', (err: any) => {
+    this.server.on('close', () => { this.emit('close'); });
+    this.server.on('error', (err: Error) => {
       this.emit('error', err == undefined ? undefined : ServerError(err));
-    });
-    this.server.on('close', (err: any) => {
-      this.emit('close', err == undefined ? undefined : ServerError(err));
     });
 
     this.server.on('connection', (socket: net.Socket) => {
@@ -71,7 +70,7 @@ export class Server extends EventEmitter {
 
     return group.Wait(timeout)
       .then((res: Result[]) => { })
-      .catch((err: Error) => { return Promise.reject(err); });
+      .catch((err: Error) => { return Promise.reject(ServerError(err)); });
   }
 
   private register(address: string, client: Client): void {

@@ -1,16 +1,11 @@
-import * as biclient from '../../src/client';
-import { Message, Request } from '../../src/codec';
-import { JsonRpcCodec } from '../../src/jsonrpc';
-import { PromiseGroup, Result } from '../../src/promise';
+import * as net from 'net';
+
+import * as birpc from '../../src/birpc';
 
 import { Server } from './server';
 import { Client } from './client';
 
 // TODO:
-//
-// * Service sous type de Client comme argument:
-//     Exec(client: <T extends Client>, ...)
-//   Client.Process(msg: Message, client?: Client extends Client = this)
 //
 // * Fix WaitTimeout qui n'échoue pas quand le timeout est excédé
 //
@@ -18,11 +13,11 @@ import { Client } from './client';
 //   * Cancel a Wait
 //
 // * Client.Call(timeout?: number)
-//
-// * Errors wrap an error e.g ServerError(err: Error)
 
 function main() {
   let server = new Server();
+
+  let client: Client;
   let timer: NodeJS.Timer;
 
   server.on('close', () => {
@@ -32,8 +27,6 @@ function main() {
     exit(0);
   });
 
-  server.Start();
-
   process.once('SIGINT', () => {
     console.log('Exiting...');
     timer = setTimeout(() => {
@@ -41,7 +34,26 @@ function main() {
     }, 10000);
 
     server.Close();
+    client.Stop();
   });
+
+  server.on('listening', () => {
+    let socket = net.createConnection({ port: 20000 }, () => {
+      client = new Client({
+        codec: new birpc.JsonRpcCodec(socket),
+        // timeout: 20000,
+        keepALiveDelay: 20000
+      });
+
+      client.Start();
+
+      setInterval(() => {
+        client.Call('mult', [1, 2, 3, 4, 5]);
+      }, 1000);
+    });
+  });
+
+  server.Start();
 }
 
 function exit(code: number, err?: Error) {

@@ -1,26 +1,34 @@
-function error(name: string): (message: string) => Error {
-  return (message: string) => {
-    if (typeof message != 'string') message = `${message}`;
+function error(name: string): (v: Error | string) => Error {
+  return ((v: Error | string): Error => {
+    let err = new Error();
 
-    let err = new Error(message);
+    if (typeof v == 'string') {
+      err.name = name || 'Error';
+      err.message = v;
 
-    err.name = name;
-
-    if (err.stack != undefined) {
-      let lines = err.stack.split('\n');
-      err.stack = lines.slice(message.split('\n').length + 1).join('\n');
+      if (err.stack != undefined)
+        err.stack = err.stack.split("\n")
+          .slice(v.split('\n').length + 1)
+          .join("\n");
+    } else {
+      err.name = name + ' ' + v.name;
+      err.message = v.message;
+      err.stack = v.stack;
     }
 
+    if (err.stack != undefined)
+      err.stack = err.stack.split('\n')
+        .filter((line: string) => { return line.match(/    at /) != null; })
+        .join('\n');
+
     return err;
-  };
+  });
 }
 
 export const
   ServerError = error('Server'),
   ClientError = error('Client'),
+  CallError = error('Call'),
   CodecError = error('Codec'),
-  ServiceError = error('Service');
-
-// export function ServiceError(code: number, message: string, data: any): Error {
-//   return error('Service')(``);
-// }
+  ServiceError = error('Service'),
+  PromiseGroupError = error('PromiseGroup');

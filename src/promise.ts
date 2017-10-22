@@ -1,10 +1,10 @@
+import { PromiseGroupError } from './error';
+
 type Status = string;
 
 export const
   Fulfilled: Status = 'Fulfilled',
-  Rejected: Status = 'Rejected',
-
-  TimeoutError = new Error('timeout');
+  Rejected: Status = 'Rejected';
 
 // TODO: classe Results ???
 //
@@ -47,8 +47,11 @@ export class PromiseGroup {
   }
 
   public Add(promise: Promise<any>): void {
-    if (this.state == Waiting) throw new Error('forbiden to Add while Waiting');
-    if (this.state == None) this.state = Adding;
+    if (this.state == Waiting)
+      throw PromiseGroupError('forbiden to Add while Waiting');
+
+    if (this.state == None)
+      this.state = Adding;
 
     let id = this.id++;
     this.promises[id] = this.wrap(promise, id);
@@ -73,18 +76,19 @@ export class PromiseGroup {
   }
 
   public Wait(timeout?: number): Promise<Result[]> {
-    if (this.state == Waiting) return Promise.reject('already waiting');
-    if (this.state == None) return Promise.resolve([]);
+    if (this.state == Waiting)
+      return Promise.reject(PromiseGroupError('forbiden to wait twice'));
+
+    if (this.state == None)
+      return Promise.resolve([]);
 
     let promises: Promise<any>[] = [];
     let timer: NodeJS.Timer;
 
     if (timeout != undefined)
       promises.push(new Promise<any>((resolve, reject) => {
-        console.log('XXXXXXXXX');
         timer = setTimeout(() => {
-          console.log('YYYYYYYYYY');
-          reject(TimeoutError);
+          reject(PromiseGroupError('timeout'));
         }, timeout);
       }));
 
@@ -107,7 +111,7 @@ export class PromiseGroup {
         if (timer != undefined) clearTimeout(timer);
         this.reset();
 
-        return Promise.reject(err);
+        return Promise.reject(PromiseGroupError(err));
       });
   }
 
