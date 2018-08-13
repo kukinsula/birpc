@@ -3,7 +3,6 @@ import * as net from 'net';
 import * as birpc from '../../src/birpc';
 
 import { Server } from './server';
-import { Client } from './client';
 
 // TODO:
 //
@@ -14,44 +13,27 @@ import { Client } from './client';
 //
 // * Client.Call(timeout?: number)
 
+const PORT = 20000;
+
 function main() {
   let server = new Server();
 
-  let client: Client;
-  let timer: NodeJS.Timer;
-
-  server.on('close', () => {
-    if (timer != undefined)
-      clearTimeout(timer);
-
-    exit(0);
-  });
+  let client: birpc.Client;
+  let timers: { [address: string]: NodeJS.Timer } = {};
 
   process.once('SIGINT', () => {
-    console.log('Exiting...');
-    timer = setTimeout(() => {
-      exit(2, new Error('Exit timeout'));
-    }, 10000);
+    console.log(`Exiting (${server.Size()} clients)...`);
 
-    server.Close();
-    client.Stop();
-  });
-
-  server.on('listening', () => {
-    let socket = net.createConnection({ port: 20000 }, () => {
-      client = new Client({
-        codec: new birpc.JsonRpcCodec(socket),
-        // timeout: 20000,
-        keepALiveDelay: 20000
-      });
-
-      client.Start();
-
-      setInterval(() => {
-        client.Call('mult', [1, 2, 3, 4, 5]);
-      }, 1000);
+    Object.keys(timers).forEach((address: string) => {
+      clearTimeout(timers[address]);
     });
+
+    server.Shutdown()
+      .then(() => { exit(0); })
+      .catch((err: Error) => { exit(1, err); });
   });
+
+  server.on('listening', () => { });
 
   server.Start();
 }

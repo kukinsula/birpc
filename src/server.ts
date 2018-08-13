@@ -33,57 +33,85 @@ export class Server extends EventEmitter {
     this.services = config.services || new ServiceSet();
   }
 
-  public Start(): void {
-    this.server.on('listening', () => { this.emit('listening'); });
-    this.server.on('close', () => { this.emit('close'); });
-    this.server.on('error', (err: Error) => {
-      this.emit('error', err == undefined ? undefined : ServerError(err));
-    });
+  public Start(): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+      this.server.on('listening', () => {
+        this.emit('listening');
 
-    this.server.on('connection', (socket: net.Socket) => {
-      socket.on('end', () => {
-        this.unregister(`${socket.remoteAddress}:${socket.remotePort}`);
+        resolve();
       });
-      this.emit('connection', socket);
-    });
+      this.server.on('close', () => { this.emit('close'); });
+      this.server.on('error', (err: Error) => {
+        if (err != undefined)
+          this.emit('error', ServerError(err));
+      });
 
-    this.server.listen(this.port, this.host);
+      this.server.on('connection', (socket: net.Socket) => {
+        socket.on('end', () => {
+          this.unregister(`${socket.remoteAddress}:${socket.remotePort}`);
+        });
+        this.emit('connection', socket);
+      });
+
+      this.server.listen(this.port, this.host);
+    });
   }
 
   public Serve(client: Client): void {
-    client.SetServices(this.services);
-    this.register(client.Address, client);
+    client.services = this.services;
+    this.register(client);
+
     client.Start();
   }
 
-  public Close(): void {
-    this.server.close();
+  public Close(): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+      this.server.on('close', () => {
+        resolve();
+      });
+
+      this.server.close((err: any) => {
+        if (err != undefined)
+          reject(err);
+      });
+    });
   }
 
   public Shutdown(timeout?: number): Promise<void> {
-    this.Close()
-
     let group = new PromiseGroup(
       Object.keys(this.clients).map((address: string) => {
         return this.clients[address].Stop();
       }));
 
-    return group.Wait(timeout)
-      .then((res: Result[]) => { })
-      .catch((err: Error) => { return Promise.reject(ServerError(err)); });
+    return this.Close()
+      .then(() => { return group.Wait(timeout); })
+      .then(() => { })
+      .catch((err: Error) => {
+        return Promise.reject(ServerError(err));
+      });
   }
 
-  private register(address: string, client: Client): void {
-    this.clients[address] = client;
+  private register(client: Client): void {
+    this.clients[client.Address] = client;
   }
 
   private unregister(address: string): void {
     delete this.clients[address];
   }
 
-  public Add(name: string, service: Service): void {
+  public GetClient(address: string): Client {
+    return this.clients[address];
+  }
+
+  public Handle(name: string, service: Service): void {
     this.services.Add(name, service);
   }
 
-  public Address(): string { return `${this.host}:${this.port}`; }
+  public Address(): string {
+    return `${this.host}:${this.port}`;
+  }
+
+  public Size(): number {
+    return Object.keys(this.clients).length;
+  }
 }

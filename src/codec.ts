@@ -22,12 +22,15 @@ export interface RpcError {
 }
 
 export class Message {
-  public req: Request;
-  public resp: Response;
+  public req?: Request;
+  public resp?: Response;
 
   constructor(req?: Request, resp?: Response) {
-    if (req != undefined) this.req = req;
-    if (resp != undefined) this.resp = resp;
+    if (req != undefined)
+      this.req = req;
+
+    if (resp != undefined)
+      this.resp = resp;
   }
 
   public IsRequest(): boolean {
@@ -35,7 +38,7 @@ export class Message {
   }
 
   public IsNotification(): boolean {
-    return this.IsRequest() && this.req.id == undefined;
+    return this.IsRequest() && this.req != undefined && this.req.id == undefined;
   }
 
   public IsResponse(): boolean {
@@ -43,9 +46,14 @@ export class Message {
   }
 
   public toString(): string {
-    if (this.IsRequest()) return JSON.stringify(this.req);
-    else if (this.IsResponse()) return JSON.stringify(this.resp);
-    else return 'Error: Message is neither a Request nor a Response';
+    if (this.IsRequest())
+      return JSON.stringify(this.req);
+
+    else if (this.IsResponse())
+      return JSON.stringify(this.resp);
+
+    else
+      return 'Error: Message is neither a Request nor a Response';
   }
 }
 
@@ -54,19 +62,23 @@ export abstract class Codec extends EventEmitter {
   private encoding: string;
 
   public abstract Encode(msg: Message): Promise<boolean>
-  public abstract Decode(buf: Buffer): Promise<Message>
+  public abstract Decode(buf: Buffer): Promise<Message[]>
 
+  // public abstract decode(source: NodeJS.ReadableStream): NodeJS.WritableStream
+  // public abstract encode(source: NodeJS.ReadableStream): NodeJS.WritableStream
+
+  // TODO: socket devient de type stream.Duplex
   constructor(socket: Socket, encoding: string = 'UTF-8') {
     super();
 
     this.socket = socket;
     this.encoding = encoding;
 
-    this.socket.on('data', (buf: Buffer) => {
-      this.Decode(buf)
-        .then((msg: Message) => { this.emit('receive', msg); })
-        .catch((err: Error) => { this.emit('error', err); });
-    });
+    // this.socket.on('data', (buf: Buffer) => {
+    //   this.Decode(buf)
+    //     .then((messages: Message[]) => { this.emit('receive', messages); })
+    //     .catch((err: Error) => { this.emit('error', err); });
+    // });
 
     this.socket.on('error', (err: Error) => {
       this.emit('error', CodecError(err));
@@ -75,8 +87,9 @@ export abstract class Codec extends EventEmitter {
     this.socket.on('end', () => { this.emit('end'); });
   }
 
-  protected Write(str: string, encoding: string = this.encoding)
-    : Promise<boolean> {
+  protected Write(
+    str: string,
+    encoding: string = this.encoding): Promise<boolean> {
 
     if (this.socket.destroyed)
       return Promise.resolve(false);

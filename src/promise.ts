@@ -35,7 +35,15 @@ export class PromiseGroup {
     this.reset();
 
     if (promises != undefined)
-      promises.forEach((promise: Promise<any>) => { this.Add(promise); });
+      promises.forEach((promise: Promise<any>) => {
+        this.Add(promise);
+      });
+
+    this.state = None;
+    this.promises = {};
+    this.results = {};
+    this.id = 0;
+    this.size = 0;
   }
 
   private reset(): void {
@@ -88,9 +96,11 @@ export class PromiseGroup {
     if (timeout != undefined)
       promises.push(new Promise<any>((resolve, reject) => {
         timer = setTimeout(() => {
-          reject(PromiseGroupError('timeout'));
+          reject(new Error('timeout'));
         }, timeout);
-      }));
+      })
+        .then(() => { })
+        .catch((err: Error) => { return Promise.reject(err); }));
 
     this.state = Waiting;
 

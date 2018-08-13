@@ -11,7 +11,10 @@ export class ServiceSet {
     this.services[name] = service;
   }
 
-  public Exec<T extends Client>(name: string, client: T | Client, args: any): Promise<any> {
+  public Exec<T extends Client>(
+    name: string,
+    client: T | Client, args: any): Promise<any> {
+
     return new Promise<any>((resolve, reject) => {
       let service = this.services[name];
 

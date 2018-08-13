@@ -2,12 +2,22 @@
   "name": "birpc",
   "version": "1.0.0",
   "description": "Bidirectional RPC Server/Client",
-  "main": "app.js",
   "scripts": {
+    "prebuild": "npm run clean",
     "build": "tsc",
-    "messager": "tsc && node ./dist/examples/messager/app.js",
-    "pretest": "tsc test/*.ts --module commonjs --target es6 --outDir ./dist/test",
+    
+    "premessager": "npm run build",
+    "messager": "node ./dist/examples/messager/app.js",
+    
+    "premessager-stresser": "npm run build",
+    "messager-stresser": "node ./dist/examples/messager/stresser.js",
+
+    "premessager-chatter": "npm run build",
+    "messager-chatter": "node ./dist/examples/messager/chatter.js",
+
+    "pretest": "tsc test/*.ts --module commonjs --target ES2017 --outDir ./dist/test",
     "test ": "./node_modules/mocha/bin/mocha ./dist/test/test/*.js",
+
     "clean": "rm -rf ./dist/",
     "stat": "wc -l ./src/*.ts"
   },
@@ -19,6 +29,8 @@
     "source-map-support": "^0.5.0"
   },
   "dependencies": {
-    "typescript": "^2.5.2"
+    "JSONStream": "^1.3.3",
+    "event-stream": "^3.3.4",
+    "typescript": "^2.9.2"
   }
 }

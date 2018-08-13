@@ -1,7 +1,10 @@
 import * as net from 'net';
 
+// import * as bircp from '../src/birpc';
+
 import { Server } from '../src/server';
 import { Client } from '../src/client';
+import { Message } from '../src/codec';
 import { JsonRpcCodec } from '../src/jsonrpc';
 import { PromiseGroup } from '../src/promise';
 
@@ -30,6 +33,63 @@ describe('Server', () => {
 
     server.once('close', (err?: Error) => { done(err); });
     server.on('listening', () => { server.Shutdown(); });
+
+    server.Start();
+  });
+
+  it('Start, Connect, Call and Close Server', (done: any) => {
+    let server = new Server(serverOptions);
+    let serverDone = ((err?: Error) => {
+      server.Shutdown()
+        .then(() => { done(); })
+        .catch((err: Error) => { done(err); });
+    });
+
+    server.on('connection', (socket: net.Socket) => {
+      let client = new Client({
+        codec: new JsonRpcCodec(socket),
+        server: true
+      });
+
+      client.on('receive', (msg: Message) => { client.Process(msg); });
+      client.on('send', (msg: Message) => { });
+
+      server.Serve(client);
+    });
+
+    server.Add('echo', (client: Client, msg: string): Promise<string> => {
+      return Promise.resolve(msg);
+    });
+
+    server.Add('error', (client: Client): Promise<void> => {
+      return Promise.reject(new Error('This is an Error'));
+    });
+
+    server.on('listening', () => {
+      let socket = net.createConnection({ port: 22000 }, () => {
+        let client = new Client({
+          codec: new JsonRpcCodec(socket),
+        });
+
+        client.on('receive', (msg: Message) => { client.Process(msg); });
+        client.on('send', (msg: Message) => { });
+
+        client.Start();
+
+        client.Call('echo', 'Hello World!')
+          .then((resp: string) => {
+            assert.equal(resp, 'Hello World!');
+
+            return client.Call('error');
+          })
+          .then((resp: any) => {
+            console.log(resp);
+
+            serverDone();
+          })
+          .catch((err: Error) => { serverDone(err); });
+      });
+    });
 
     server.Start();
   });
