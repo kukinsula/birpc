@@ -246,6 +246,12 @@ export class Client extends EventEmitter {
 
       sender
         .pipe(this.codec.Encode())
+        .on('error', (err: any) => { this.emit('error', err); reject(err); })
+
+        // TODO: PK ça marche pas ???
+        // 
+        // .pipe(this.socket)
+        // .on('error', (err: any) => { this.emit('error', err); reject(err); })
 
         .pipe(es.map((buffer: Buffer, done: (err?: null | any, data?: null | any) => void) => {
           this.write(buffer)
@@ -257,8 +263,7 @@ export class Client extends EventEmitter {
             })
             .catch((err: any) => { done(err); });
         }))
-
-        .on('error', (err: any) => { reject(err); });
+        .on('error', (err: any) => { this.emit('error', err); reject(err); });
 
       let data = msg.IsRequest() ? msg.req : msg.resp;
 

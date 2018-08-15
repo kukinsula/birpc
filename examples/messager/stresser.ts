@@ -4,7 +4,7 @@ import * as birpc from '../../src/birpc';
 
 const
   PORT = 20000,
-  WORKERS = 100;
+  WORKERS = 2;
 
 function Stress(): void {
   process.once('SIGINT', () => {
