@@ -1,7 +1,9 @@
-import { EventEmitter } from 'events';
-import { Socket } from 'net';
+import * as stream from 'stream';
 
-import { CodecError } from './error';
+export interface Codec {
+  Decode(): stream.Duplex
+  Encode(): stream.Duplex
+}
 
 export interface Request {
   id?: number;
@@ -54,64 +56,5 @@ export class Message {
 
     else
       return 'Error: Message is neither a Request nor a Response';
-  }
-}
-
-export abstract class Codec extends EventEmitter {
-  private socket: Socket;
-  private encoding: string;
-
-  public abstract Encode(msg: Message): Promise<boolean>
-  public abstract Decode(buf: Buffer): Promise<Message[]>
-
-  // public abstract decode(source: NodeJS.ReadableStream): NodeJS.WritableStream
-  // public abstract encode(source: NodeJS.ReadableStream): NodeJS.WritableStream
-
-  // TODO: socket devient de type stream.Duplex
-  constructor(socket: Socket, encoding: string = 'UTF-8') {
-    super();
-
-    this.socket = socket;
-    this.encoding = encoding;
-
-    // this.socket.on('data', (buf: Buffer) => {
-    //   this.Decode(buf)
-    //     .then((messages: Message[]) => { this.emit('receive', messages); })
-    //     .catch((err: Error) => { this.emit('error', err); });
-    // });
-
-    this.socket.on('error', (err: Error) => {
-      this.emit('error', CodecError(err));
-    });
-
-    this.socket.on('end', () => { this.emit('end'); });
-  }
-
-  protected Write(
-    str: string,
-    encoding: string = this.encoding): Promise<boolean> {
-
-    if (this.socket.destroyed)
-      return Promise.resolve(false);
-
-    return new Promise<boolean>((resolve, reject) => {
-      let flushed = this.socket.write(str, encoding, () => {
-        resolve(flushed);
-      });
-    });
-  }
-
-  public Close(): Promise<void> {
-    return new Promise<void>((resolve, reject) => {
-      this.socket.end();
-      this.socket.destroy();
-      this.emit('end');
-
-      resolve();
-    });
-  }
-
-  public GetSocket(): Socket {
-    return this.socket;
   }
 }

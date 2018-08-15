@@ -5,19 +5,14 @@
   "scripts": {
     "prebuild": "npm run clean",
     "build": "tsc",
-    
     "premessager": "npm run build",
     "messager": "node ./dist/examples/messager/app.js",
-    
     "premessager-stresser": "npm run build",
     "messager-stresser": "node ./dist/examples/messager/stresser.js",
-
     "premessager-chatter": "npm run build",
     "messager-chatter": "node ./dist/examples/messager/chatter.js",
-
     "pretest": "tsc test/*.ts --module commonjs --target ES2017 --outDir ./dist/test",
     "test ": "./node_modules/mocha/bin/mocha ./dist/test/test/*.js",
-
     "clean": "rm -rf ./dist/",
     "stat": "wc -l ./src/*.ts"
   },

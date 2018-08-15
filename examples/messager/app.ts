@@ -18,22 +18,13 @@ const PORT = 20000;
 function main() {
   let server = new Server();
 
-  let client: birpc.Client;
-  let timers: { [address: string]: NodeJS.Timer } = {};
-
   process.once('SIGINT', () => {
     console.log(`Exiting (${server.Size()} clients)...`);
-
-    Object.keys(timers).forEach((address: string) => {
-      clearTimeout(timers[address]);
-    });
 
     server.Shutdown()
       .then(() => { exit(0); })
       .catch((err: Error) => { exit(1, err); });
   });
-
-  server.on('listening', () => { });
 
   server.Start();
 }

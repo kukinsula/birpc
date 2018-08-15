@@ -17,7 +17,28 @@ function Stress(): void {
 
   for (let index = 0; index < WORKERS; index++)
     NewClient()
-      .then((client: birpc.Client) => { stresser(client); })
+      .then((client: birpc.Client) => {
+        client.on('error', (err: any) => {
+          console.log(`${client.Prefix} ${err}`);
+
+          quit = true;
+
+          client.Stop();
+        });
+
+        client.on('close', () => {
+          console.log(`${client.Prefix} connection closed`)
+        });
+
+        client.services.Add('message', (client: birpc.Client, args: any) => {
+          console.log(`\n${args.from}> ${args.message}`);
+          process.stdout.write('> ');
+
+          return Promise.resolve();
+        });
+
+        stresser(client);
+      })
       .catch((err: any) => { throw err; });
 }
 
@@ -25,7 +46,8 @@ function NewClient(): Promise<birpc.Client> {
   return new Promise<birpc.Client>((resolve, reject) => {
     let socket = net.createConnection({ port: PORT }, () => {
       let client = new birpc.Client({
-        codec: new birpc.JsonRpcCodec(socket),
+        socket: socket,
+        codec: new birpc.JsonRpcCodec(),
         // timeout: 20000,
         keepAliveDelay: 20000
       });

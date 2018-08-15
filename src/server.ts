@@ -3,9 +3,6 @@ import { EventEmitter } from 'events';
 
 import { Client } from './client';
 import { ServiceSet, Service } from './service';
-import { ServerError } from './error';
-import { Codec } from './codec';
-import { JsonRpcCodec } from './jsonrpc';
 import { PromiseGroup, Result } from './promise';
 
 require('source-map-support').install();
@@ -22,6 +19,8 @@ export class Server extends EventEmitter {
   private server: net.Server;
   private clients: { [address: string]: Client };
   private services: ServiceSet;
+  public Address: string;
+  public Prefix: string;
 
   constructor(config: ServerConfig = {}) {
     super();
@@ -31,6 +30,8 @@ export class Server extends EventEmitter {
     this.clients = {};
     this.server = new net.Server();
     this.services = config.services || new ServiceSet();
+    this.Address = `${this.host}:${this.port}`;
+    this.Prefix = `Server ${this.Address}`;
   }
 
   public Start(): Promise<void> {
@@ -40,16 +41,17 @@ export class Server extends EventEmitter {
 
         resolve();
       });
+
       this.server.on('close', () => { this.emit('close'); });
-      this.server.on('error', (err: Error) => {
-        if (err != undefined)
-          this.emit('error', ServerError(err));
-      });
+      this.server.on('error', (err: Error) => { this.emit('error', err); });
 
       this.server.on('connection', (socket: net.Socket) => {
         socket.on('end', () => {
-          this.unregister(`${socket.remoteAddress}:${socket.remotePort}`);
+          let address = `${socket.remoteAddress}:${socket.remotePort}`;
+
+          this.unregister(address);
         });
+
         this.emit('connection', socket);
       });
 
@@ -77,6 +79,7 @@ export class Server extends EventEmitter {
     });
   }
 
+  // TODO: tester le Shutdown avec timeout !
   public Shutdown(timeout?: number): Promise<void> {
     let group = new PromiseGroup(
       Object.keys(this.clients).map((address: string) => {
@@ -86,9 +89,7 @@ export class Server extends EventEmitter {
     return this.Close()
       .then(() => { return group.Wait(timeout); })
       .then(() => { })
-      .catch((err: Error) => {
-        return Promise.reject(ServerError(err));
-      });
+      .catch((err: Error) => { throw err; });
   }
 
   private register(client: Client): void {
@@ -105,10 +106,6 @@ export class Server extends EventEmitter {
 
   public Handle(name: string, service: Service): void {
     this.services.Add(name, service);
-  }
-
-  public Address(): string {
-    return `${this.host}:${this.port}`;
   }
 
   public Size(): number {

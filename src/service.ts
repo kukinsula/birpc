@@ -19,7 +19,7 @@ export class ServiceSet {
       let service = this.services[name];
 
       if (service == undefined)
-        return reject(ServiceError(`Service '${name}' not found`));
+        return reject(new Error(`Service '${name}' not found`));
 
       service.call(service, client, args)
         .then((res: any) => { resolve(res); })

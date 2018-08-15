@@ -6,55 +6,88 @@ import * as birpc from '../../src/birpc';
 const PORT = 20000;
 
 function Chat() {
+  let chatter: birpc.Client;
+
   return NewClient(PORT)
     .then((client: birpc.Client) => {
+      chatter = client;
+
+      client.Start();
+
       let reader = readline.createInterface({
         input: process.stdin,
         output: process.stdout,
         terminal: false
       });
 
-      let repl = () => {
-        reader.question('> ', (msg: string) => {
-          let args = {
-            room: 'test',
-            message: msg
-          };
+      client.on('error', (err: any) => {
+        console.log(`${client.Prefix} ${err}`);
 
-          client.Notify('message', args)
-            .then((result: any) => { return repl(); })
-            .catch((err: any) => { client.Stop(); });
-        });
+        reader.close();
+        client.Close();
+      });
+
+      client.on('close', () => {
+        console.log(`${client.Prefix} connection closed`)
+        reader.close();
+      });
+
+      let repl = (): Promise<void> => {
+        return new Promise<any>((resolve, reject) => {
+          reader.question('> ', (msg: string) => {
+            let args = {
+              room: 'test',
+              message: msg
+            };
+
+            resolve(args);
+          });
+        })
+          .then((args: any) => { return chatter.Notify('message', args); })
+          .then((result: any) => { return repl(); })
+          .catch((err: any) => { throw err });
       };
 
-      repl();
+      return repl();
     })
-    .catch((err: any) => { console.log('ERROR', err); });
+    .catch((err: any) => {
+      console.log(`${chatter.Address} failure: ${err}`);
+
+      return chatter.Stop()
+    });
 }
 
 function NewClient(port: number): Promise<birpc.Client> {
   return new Promise<birpc.Client>((resolve, reject) => {
     let socket = net.createConnection({ port: port }, () => {
       let client = new birpc.Client({
-        codec: new birpc.JsonRpcCodec(socket),
+        socket: socket,
+        codec: new birpc.JsonRpcCodec(),
         // timeout: 20000,
         keepAliveDelay: 20000
       });
 
-      client.on('receive', (msg: birpc.Message) => {
-        if (msg.IsRequest()) {
-          let req = msg.req as any;
+      client.services.Add('message', (client: birpc.Client, args: any) => {
+        console.log(`\n${args.from}> ${args.message}`);
+        process.stdout.write('> ');
 
-          console.log(`\n${req.params.from}> ${req.params.message}`);
-          process.stdout.write('> ');
-        }
+        return Promise.resolve();
       });
-
-      client.Start();
 
       resolve(client);
     });
   });
 }
 
-Chat();
+Chat()
+  .then(() => { exit(0); })
+  .catch((err: any) => { exit(1, err); });
+
+function exit(code: number, err?: Error) {
+  if (err != undefined)
+    console.log(`${err.stack}`);
+
+  console.log('Done!');
+
+  process.exit(code);
+}

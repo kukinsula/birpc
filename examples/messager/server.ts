@@ -16,17 +16,19 @@ class Room {
   }
 
   public Broadcast(from: birpc.Client, params: any): Promise<void> {
+    console.log('');
+
     return Promise.all(this.clients.map((client: birpc.Client) => {
       if (from.Address == client.Address)
-        return Promise.resolve();
+        return Promise.resolve({ result: undefined, error: undefined });
 
       params.from = from.Address;
 
       return client.Notify('message', params)
-        .then(() => { })
-        .catch((err: any) => { throw err; });
+        .then((result: any) => { return { result: result, error: undefined }; })
+        .catch((err: any) => { return { result: undefined, error: err }; });
     }))
-      .then(() => { })
+      .then((results: any[]) => { })
       .catch((err: any) => { throw err; });
   }
 }
@@ -43,9 +45,7 @@ export class Server extends birpc.Server {
       'test': new Room('test')
     };
 
-    let address = this.Address();
-
-    this.on('listening', () => { console.log(`Server listening at ${address}`); });
+    this.on('listening', () => { console.log(`${this.Prefix} listening`); });
     this.on('error', (err: Error) => {
       console.log(`Server error: ${err}`);
 
@@ -55,21 +55,21 @@ export class Server extends birpc.Server {
     });
 
     this.once('close', (err: Error) => {
-      console.log(`Server listening at ${address} closed` +
-        (err == undefined ?
-          '' : `: ${err.name}: ${err.message}\n${err.stack}`));
+      console.log(`${this.Prefix} closed` + (err == undefined ?
+        '' : `: ${err.name}: ${err.message}\n${err.stack}`));
     });
 
     this.on('connection', (socket: net.Socket) => {
       let remoteAddress = `${socket.remoteAddress}:${socket.remotePort}`;
-      console.log(`${address} Incoming connection from ${remoteAddress}`)
-
       let client = new birpc.Client({
-        codec: new birpc.JsonRpcCodec(socket),
+        socket: socket,
+        codec: new birpc.JsonRpcCodec(),
         server: true,
         // timeout: 20000,
         keepAliveDelay: 20000
       });
+
+      console.log(`${client.Prefix} incoming connection`)
 
       client.on('receive', (msg: birpc.Message) => {
         console.log(`${client.Prefix} <- ${msg.toString()}`);
@@ -79,12 +79,22 @@ export class Server extends birpc.Server {
         console.log(`${client.Prefix} -> ${msg.toString()}`);
       });
 
+      client.on('error', (err: any) => {
+        console.log(`${client.Prefix} error: ${err}`);
+
+        client.Stop();
+      });
+
+      client.on('close', () => {
+        console.log(`${client.Prefix} connection closed`)
+      });
+
       this.Serve(client);
 
       this.rooms['test'].Add(client);
 
       if (this.Size() % 100 == 0)
-        console.log(`Server ${this.Address()}: hosts ${this.Size()} clients`);
+        console.log(`Server ${this.Prefix}: hosts ${this.Size()} clients`);
     });
 
     this.Handle('add', (client: birpc.Client, args: any): Promise<any> => {
@@ -141,7 +151,7 @@ export class Server extends birpc.Server {
         if (recipient == undefined)
           throw new Error(`Server: client ${args.to} doesn't exist`);
 
-        return recipient.Notify('message', args)
+        return recipient.Call('message', args)
           .then(() => { return { ok: true }; })
           .catch((err: any) => { throw err; });
       }
@@ -159,12 +169,21 @@ export class Server extends birpc.Server {
 
       throw new Error(`Server: invalid message RPC call`);
     });
+
+    this.Handle('ping', (client: birpc.Client, args: any): Promise<any> => {
+      if (args == 'stop')
+        return Promise.resolve('stop');
+
+      return client.Call('pong')
+        .then(() => { return 'pong'; })
+        .catch((err: any) => { throw err; });
+    });
   }
 
   private incCalls(): void {
     this.calls++;
 
     if (this.calls % 1000 == 0)
-      console.log(`Server ${this.Address()}: ${this.calls} calls made`);
+      console.log(`Server ${this.Prefix}: ${this.calls} calls made`);
   }
 }
